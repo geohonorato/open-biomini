@@ -1,0 +1,23 @@
+﻿# Visual Studio / .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.pdb
+
+# Logs & Temporary
+*.log
+*.tmp
+*.bak
+digitais_salvas.dat
+fingerprints.json
+captura.png
+digital*.png
+digital*.b64
+
+# OS generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
