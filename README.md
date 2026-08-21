@@ -17,7 +17,7 @@ The **Suprema BioMini** (`VID_16D1 & PID_0400`, SFR300-S) is one of the most wid
 
 **OpenBioMini** provides a complete, modern, and open-source solution:
 1. **Patched Native SDK**: Eliminates OEM Vendor ID locks and license blocks via binary patching.
-2. **REST API Bridge**: A lightweight background service (`OpenBioMini.Bridge.exe`) that exposes local HTTP endpoints (`http://localhost:8080/api/`) with CORS enabled—allowing **any WebApp, Electron app (like [Veritas](https://github.com/geohonorato)), Python, or Node.js service** to capture fingerprints with 3 lines of code.
+2. **REST API Bridge**: A lightweight background service (`OpenBioMini.Bridge.exe`) that exposes local HTTP endpoints (`http://localhost:8080/api/`) with CORS enabled—allowing **any WebApp, Electron app (like Veritas), Python, or Node.js service** to capture fingerprints with 3 lines of code.
 3. **CLI Automation Tool**: A standalone command-line tool (`biomini.exe`) for terminal scripts and CI/CD pipelines.
 
 ---
@@ -151,4 +151,4 @@ Ele elimina a dependência dos SDKs descontinuados da fabricante e fornece:
 ## 📄 License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.  
-Maintained by **[Geovanni Honorato](https://github.com/geohonorato)**.
+Maintained by **Geovanni Honorato**.
