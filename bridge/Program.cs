@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Pipes;
 using System.Net;
 using System.Text;
 using System.Threading;
@@ -11,12 +12,14 @@ namespace OpenBioMini.Bridge {
         private static HttpListener s_Listener;
         private static bool s_Running = true;
         private const int PORT = 8080;
+        private const string PIPE_NAME = "BioMiniWbfPipe";
 
         static void Main(string[] args) {
-            Console.Title = "OpenBioMini — HTTP REST Bridge Server";
+            Console.Title = "OpenBioMini — Universal Bridge (REST + WBF Pipe)";
             Console.WriteLine("==================================================");
-            Console.WriteLine("🚀 OPEN-BIOMINI HTTP REST BRIDGE SERVER");
-            Console.WriteLine("   Local Endpoint: http://localhost:" + PORT + "/api/");
+            Console.WriteLine("🚀 OPEN-BIOMINI UNIVERSAL BRIDGE SERVER");
+            Console.WriteLine("   Local REST: http://localhost:" + PORT + "/api/");
+            Console.WriteLine("   WBF Pipe  : \\\\.\\pipe\\" + PIPE_NAME);
             Console.WriteLine("==================================================\n");
 
             Console.Write("[*] Inicializando leitor biométrico... ");
@@ -33,13 +36,18 @@ namespace OpenBioMini.Bridge {
                 Console.ResetColor();
             }
 
+            // Inicia thread de escuta do Windows Hello / WBF Named Pipe
+            Thread pipeThread = new Thread(RunPipeServer);
+            pipeThread.IsBackground = true;
+            pipeThread.Start();
+
             try {
                 s_Listener = new HttpListener();
                 s_Listener.Prefixes.Add("http://localhost:" + PORT + "/");
                 s_Listener.Prefixes.Add("http://127.0.0.1:" + PORT + "/");
                 s_Listener.Start();
-                Console.WriteLine("\n[*] Servidor HTTP escutando em http://localhost:" + PORT + "/");
-                Console.WriteLine("[*] Pressione Ctrl+C para encerrar.\n");
+                Console.WriteLine("[*] Servidor HTTP escutando em http://localhost:" + PORT + "/");
+                Console.WriteLine("[*] WBF Named Pipe pronto para Windows Hello.\n");
 
                 while (s_Running) {
                     try {
@@ -51,10 +59,36 @@ namespace OpenBioMini.Bridge {
                 }
             } catch (Exception ex) {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("[!] Erro ao iniciar servidor HTTP: " + ex.Message);
+                Console.WriteLine("[!] Erro no servidor: " + ex.Message);
                 Console.ResetColor();
             } finally {
                 if (s_Controller != null) s_Controller.Dispose();
+            }
+        }
+
+        private static void RunPipeServer() {
+            while (s_Running) {
+                try {
+                    using (NamedPipeServerStream pipe = new NamedPipeServerStream(PIPE_NAME, PipeDirection.InOut)) {
+                        pipe.WaitForConnection();
+                        byte[] buffer = new byte[64];
+                        int read = pipe.Read(buffer, 0, buffer.Length);
+                        string cmd = Encoding.ASCII.GetString(buffer, 0, read).Trim();
+
+                        if (cmd == "SCAN") {
+                            Console.WriteLine("[WBF] Windows Hello solicitou captura biométrica...");
+                            if (!s_Controller.IsConnected) s_Controller.Initialize();
+
+                            ScanResult result = s_Controller.Capture(6000);
+                            if (result.Success && result.Template != null) {
+                                pipe.Write(result.Template, 0, result.TemplateSize);
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                Console.WriteLine("      ✓ Digital enviada para o Windows Hello com sucesso!");
+                                Console.ResetColor();
+                            }
+                        }
+                    }
+                } catch {}
             }
         }
 
@@ -62,7 +96,6 @@ namespace OpenBioMini.Bridge {
             HttpListenerRequest req = ctx.Request;
             HttpListenerResponse res = ctx.Response;
 
-            // Habilita CORS total para WebApps e SPAs locais
             res.AddHeader("Access-Control-Allow-Origin", "*");
             res.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
             res.AddHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -79,9 +112,7 @@ namespace OpenBioMini.Bridge {
             try {
                 if (path == "/api/status" || path == "/api/") {
                     bool connected = s_Controller.IsConnected;
-                    if (!connected) {
-                        connected = s_Controller.Initialize();
-                    }
+                    if (!connected) connected = s_Controller.Initialize();
 
                     responseJson = string.Format(
                         "{{\"connected\":{0},\"model\":\"{1}\",\"serial\":\"{2}\",\"version\":\"1.0.0\"}}",
@@ -89,14 +120,9 @@ namespace OpenBioMini.Bridge {
                         s_Controller.ScannerModel,
                         s_Controller.ScannerSerial
                     );
-                    Console.WriteLine("[GET] /api/status -> Conectado: " + connected);
                 }
                 else if (path == "/api/scan" || path == "/api/capture") {
-                    Console.WriteLine("[POST] /api/scan -> Aguardando dedo no sensor...");
-                    if (!s_Controller.IsConnected) {
-                        s_Controller.Initialize();
-                    }
-
+                    if (!s_Controller.IsConnected) s_Controller.Initialize();
                     ScanResult result = s_Controller.Capture(6000);
 
                     if (result.Success) {
@@ -108,17 +134,8 @@ namespace OpenBioMini.Bridge {
                             templateB64,
                             result.ImageBase64 ?? ""
                         );
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("       ✓ Captura concluída! Qualidade: " + result.Quality + "%");
-                        Console.ResetColor();
                     } else {
-                        responseJson = string.Format(
-                            "{{\"success\":false,\"error\":\"{0}\"}}",
-                            result.ErrorMessage ?? "Falha na captura"
-                        );
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("       ✗ " + result.ErrorMessage);
-                        Console.ResetColor();
+                        responseJson = string.Format("{{\"success\":false,\"error\":\"{0}\"}}", result.ErrorMessage ?? "Falha");
                     }
                 }
                 else if (path == "/api/match" || path == "/api/verify") {
@@ -126,8 +143,6 @@ namespace OpenBioMini.Bridge {
                     using (StreamReader reader = new StreamReader(req.InputStream, req.ContentEncoding)) {
                         body = reader.ReadToEnd();
                     }
-
-                    // Parser JSON simplificado sem dependências externas
                     string tA = ExtractJsonString(body, "templateA");
                     string tB = ExtractJsonString(body, "templateB");
 
@@ -135,26 +150,23 @@ namespace OpenBioMini.Bridge {
                         byte[] bytesA = Convert.FromBase64String(tA);
                         byte[] bytesB = Convert.FromBase64String(tB);
                         bool isMatch = s_Controller.Verify(bytesA, bytesA.Length, bytesB, bytesB.Length);
-
                         responseJson = string.Format("{{\"match\":{0}}}", isMatch ? "true" : "false");
-                        Console.WriteLine("[POST] /api/match -> Match: " + isMatch);
                     } else {
-                        responseJson = "{\"match\":false,\"error\":\"Parâmetros templateA ou templateB ausentes\"}";
+                        responseJson = "{\"match\":false,\"error\":\"Parametros invalidos\"}";
                     }
-                }
-                else {
+                } else {
                     res.StatusCode = 404;
-                    responseJson = "{\"error\":\"Rota não encontrada\"}";
+                    responseJson = "{\"error\":\"Rota inexistente\"}";
                 }
             } catch (Exception ex) {
                 res.StatusCode = 500;
                 responseJson = string.Format("{{\"error\":\"{0}\"}}", ex.Message.Replace("\"", "'"));
             }
 
-            byte[] buffer = Encoding.UTF8.GetBytes(responseJson);
+            byte[] outBuf = Encoding.UTF8.GetBytes(responseJson);
             res.ContentType = "application/json; charset=utf-8";
-            res.ContentLength64 = buffer.Length;
-            res.OutputStream.Write(buffer, 0, buffer.Length);
+            res.ContentLength64 = outBuf.Length;
+            res.OutputStream.Write(outBuf, 0, outBuf.Length);
             res.Close();
         }
 

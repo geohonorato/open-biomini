@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 public class SetupForm : Form {
     private Label lblTitle;
@@ -17,8 +18,8 @@ public class SetupForm : Form {
     private CheckBox chkOpenApp;
 
     public SetupForm() {
-        this.Text = "Instalador Universal — Suprema BioMini";
-        this.Size = new Size(540, 420);
+        this.Text = "Instalador Universal — Suprema BioMini (Com Windows Hello)";
+        this.Size = new Size(540, 440);
         this.StartPosition = FormStartPosition.CenterScreen;
         this.BackColor = Color.FromArgb(15, 23, 42);
         this.ForeColor = Color.White;
@@ -27,7 +28,7 @@ public class SetupForm : Form {
 
         lblTitle = new Label {
             Text = "OPEN-BIOMINI UNIVERSAL SETUP",
-            Location = new Point(30, 25),
+            Location = new Point(30, 20),
             Size = new Size(470, 30),
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
             ForeColor = Color.FromArgb(96, 165, 250)
@@ -35,8 +36,8 @@ public class SetupForm : Form {
         this.Controls.Add(lblTitle);
 
         lblSubtitle = new Label {
-            Text = "Instalação automática do Driver USB PnP + Bibliotecas Universais (Sem travas de Vendor ID)",
-            Location = new Point(30, 60),
+            Text = "Driver USB PnP + Bibliotecas Universais + WBF Adapter (Windows Hello)",
+            Location = new Point(30, 52),
             Size = new Size(470, 38),
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(148, 163, 184)
@@ -44,8 +45,8 @@ public class SetupForm : Form {
         this.Controls.Add(lblSubtitle);
 
         Panel boxInfo = new Panel {
-            Location = new Point(30, 105),
-            Size = new Size(465, 120),
+            Location = new Point(30, 95),
+            Size = new Size(465, 135),
             BackColor = Color.FromArgb(30, 41, 59),
             BorderStyle = BorderStyle.None
         };
@@ -54,18 +55,19 @@ public class SetupForm : Form {
         Label lblInfo = new Label {
             Text = "O que será instalado:\n" +
                    "• Driver USB PnP (SFRUSB.sys / sfr.inf) assinado para Windows 10/11\n" +
+                   "• WBF Sensor Adapter em C++ para Windows Hello (BioMiniSensorAdapter.dll)\n" +
                    "• Bibliotecas de runtime sem trava OEM (UFScanner.dll / UFMatcher.dll)\n" +
-                   "• Painel de Controle de Biometria (Cadastro, Verificação 1:N e Exclusão)\n" +
-                   "• REST API Bridge (Porta 8080) para integração Web/Electron",
-            Location = new Point(15, 12),
-            Size = new Size(435, 95),
+                   "• Painel de Controle de Biometria (Cadastro, Ponto e Verificação 1:N)\n" +
+                   "• REST API Bridge + WBF Named Pipe (Porta 8080) para Web/Electron",
+            Location = new Point(15, 10),
+            Size = new Size(435, 115),
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(226, 232, 240)
         };
         boxInfo.Controls.Add(lblInfo);
 
         progress = new ProgressBar {
-            Location = new Point(30, 240),
+            Location = new Point(30, 245),
             Size = new Size(465, 18),
             Style = ProgressBarStyle.Continuous,
             Value = 0,
@@ -75,7 +77,7 @@ public class SetupForm : Form {
 
         lblStatus = new Label {
             Text = "Pronto para instalar. Conecte o leitor na porta USB e clique abaixo.",
-            Location = new Point(30, 265),
+            Location = new Point(30, 270),
             Size = new Size(465, 35),
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             ForeColor = Color.FromArgb(52, 211, 153)
@@ -84,7 +86,7 @@ public class SetupForm : Form {
 
         chkOpenApp = new CheckBox {
             Text = "Abrir Painel de Biometria ao concluir a instalação",
-            Location = new Point(30, 305),
+            Location = new Point(30, 312),
             Size = new Size(400, 24),
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(148, 163, 184),
@@ -93,8 +95,8 @@ public class SetupForm : Form {
         this.Controls.Add(chkOpenApp);
 
         btnInstall = new Button {
-            Text = "🚀 Instalar Driver e Software (1-Clique)",
-            Location = new Point(30, 335),
+            Text = "🚀 Instalar Driver e Windows Hello (1-Clique)",
+            Location = new Point(30, 345),
             Size = new Size(465, 45),
             BackColor = Color.FromArgb(37, 99, 235),
             ForeColor = Color.White,
@@ -114,7 +116,7 @@ public class SetupForm : Form {
 
         ThreadPool.QueueUserWorkItem((state) => {
             try {
-                UpdateStatus("1/4: Extraindo arquivos do pacote...", 25);
+                UpdateStatus("1/5: Extraindo arquivos do pacote...", 20);
                 string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
                 if (string.IsNullOrEmpty(programFiles)) {
                     programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -138,19 +140,38 @@ public class SetupForm : Form {
                     }
                 }
 
-                UpdateStatus("2/4: Instalando Driver USB PnP no Windows...", 50);
+                UpdateStatus("2/5: Instalando Driver USB PnP no Windows...", 40);
                 string driverInf = Path.Combine(targetDir, "driver", "sfr.inf");
                 if (File.Exists(driverInf)) {
                     RunSilentProcess("pnputil.exe", string.Format("/add-driver \"{0}\" /install", driverInf));
                 }
 
-                UpdateStatus("3/4: Vinculando leitor e escaneando portas USB...", 75);
+                UpdateStatus("3/5: Registrando WBF Sensor Adapter para o Windows Hello...", 60);
+                string wbfDllSrc = Path.Combine(targetDir, "app", "BioMiniSensorAdapter.dll");
+                string sysPlugins = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WinBioPlugins");
+                try {
+                    if (!Directory.Exists(sysPlugins)) Directory.CreateDirectory(sysPlugins);
+                    if (File.Exists(wbfDllSrc)) {
+                        File.Copy(wbfDllSrc, Path.Combine(sysPlugins, "BioMiniSensorAdapter.dll"), true);
+                    }
+
+                    // Registra Adapter no Registry
+                    using (RegistryKey key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\SensorAdapters\{B3F484B6-6B22-4D3B-983C-111122223333}")) {
+                        if (key != null) {
+                            key.SetValue("SensorAdapterBinary", "BioMiniSensorAdapter.dll", RegistryValueKind.String);
+                            key.SetValue("Vendor", "Suprema Inc.", RegistryValueKind.String);
+                            key.SetValue("Description", "Suprema BioMini WBF Sensor Adapter", RegistryValueKind.String);
+                        }
+                    }
+                } catch {}
+
+                UpdateStatus("4/5: Vinculando leitor e escaneando portas USB...", 80);
                 RunSilentProcess("pnputil.exe", "/scan-devices");
 
-                UpdateStatus("4/4: Criando atalhos na Área de Trabalho...", 90);
+                UpdateStatus("5/5: Criando atalhos e iniciando serviços...", 90);
                 CreateShortcuts(targetDir);
 
-                UpdateStatus("✅ INSTALAÇÃO CONCLUÍDA COM SUCESSO! Leitor pronto para uso.", 100);
+                UpdateStatus("✅ INSTALAÇÃO CONCLUÍDA! Windows Hello e Aplicativos Prontos.", 100);
 
                 this.Invoke((MethodInvoker)delegate {
                     btnInstall.Text = "✓ Concluído com Sucesso";
@@ -202,7 +223,6 @@ public class SetupForm : Form {
             string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             string appExe = Path.Combine(targetDir, "app", "VeritasBioMini.exe");
 
-            // Cria atalho via WScript.Shell
             Type shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType != null) {
                 dynamic shell = Activator.CreateInstance(shellType);

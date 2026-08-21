@@ -1,0 +1,59 @@
+;
+; biomini_wbf.inf
+; Windows Biometric Framework (WBF) Driver for Suprema BioMini
+;
+
+[Version]
+Signature="$Windows NT$"
+Class=Biometric
+ClassGuid={53d29ef7-377c-4d14-864b-eb3a85769359}
+Provider=%ProviderName%
+CatalogFile=biomini_wbf.cat
+DriverVer=08/21/2026,1.0.0.0
+PnpLockdown=1
+
+[Manufacturer]
+%ManufacturerName%=SupremaSection,NTamd64
+
+[SupremaSection.NTamd64]
+%DeviceName%=Biometric_Install, USB\VID_16D1&PID_0400
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+BioMiniSensorAdapter.dll = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+UMDriverCopy = 12,UMDF
+AdapterCopy = 11,WinBioDatabase
+
+[Biometric_Install.NT]
+CopyFiles=AdapterCopy
+Include=WINUSB.INF
+Needs=WINUSB.NT
+
+[Biometric_Install.NT.Services]
+Include=WINUSB.INF
+Needs=WINUSB.NT.Services
+
+[Biometric_Install.NT.HW]
+AddReg=Biometric_Device_AddReg
+
+[Biometric_Device_AddReg]
+HKR,,"DeviceInterfaceGUIDs",0x10000,"{E2830510-487B-4760-8C2B-5E046E6E3F8D}"
+HKR,WinBio\Configurations,DefaultConfiguration,0x00010001,0
+HKR,WinBio\Configurations\0,SensorAdapterBinary,0x00000000,"BioMiniSensorAdapter.dll"
+HKR,WinBio\Configurations\0,EngineAdapterBinary,0x00000000,"winbioengineadapter.dll"
+HKR,WinBio\Configurations\0,StorageAdapterBinary,0x00000000,"winbiostorageadapter.dll"
+HKR,WinBio\Configurations\0,DatabaseId,0x00000000,"{B3F484B6-6B22-4D3B-983C-111122223333}"
+
+[AdapterCopy]
+BioMiniSensorAdapter.dll,,,0x00004000
+
+[Strings]
+ProviderName = "OpenBioMini Community"
+ManufacturerName = "Suprema Inc."
+DeviceName = "Suprema BioMini Fingerprint Sensor (Windows Hello WBF)"
+DiskName = "OpenBioMini WBF Driver Installation Disk"
