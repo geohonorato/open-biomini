@@ -1,4 +1,4 @@
-﻿# Visual Studio / .NET
+# Visual Studio / .NET
 [Bb]in/
 [Oo]bj/
 *.user
@@ -15,9 +15,15 @@ captura.png
 digital*.png
 digital*.b64
 
+# C/C++ Build Artifacts
+*.obj
+*.exp
+*.lib
+
 # OS generated
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+

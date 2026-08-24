@@ -1,4 +1,4 @@
-﻿#include <windows.h>
+#include <windows.h>
 
 #ifndef ARGUMENT_PRESENT
 #define ARGUMENT_PRESENT(ArgumentPointer) ((CHAR*)(ArgumentPointer) != (CHAR*)NULL)
@@ -9,9 +9,11 @@
 #include <winbio_adapter.h>
 #include <stdio.h>
 
-// GUID do BioMini WBF Sensor Adapter: {B3F484B6-6B22-4D3B-983C-111122223333}
 static const GUID BIO_MINI_SENSOR_ADAPTER_GUID = 
 { 0xb3f484b6, 0x6b22, 0x4d3b, { 0x98, 0x3c, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33 } };
+
+static const GUID BIO_MINI_ENGINE_ADAPTER_GUID = 
+{ 0xc4e595c7, 0x7c33, 0x4e4c, { 0xa9, 0x4d, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44 } };
 
 #define PIPE_NAME L"\\\\.\\pipe\\BioMiniWbfPipe"
 
@@ -21,6 +23,7 @@ typedef struct _ADAPTER_CONTEXT {
     WINBIO_BIR* pLastSample;
 } ADAPTER_CONTEXT, *PADAPTER_CONTEXT;
 
+// --- SENSOR ADAPTER METHODS ---
 static HRESULT WINAPI SensorAdapterAttach(PWINBIO_PIPELINE Pipeline);
 static HRESULT WINAPI SensorAdapterDetach(PWINBIO_PIPELINE Pipeline);
 static HRESULT WINAPI SensorAdapterClearContext(PWINBIO_PIPELINE Pipeline);
@@ -42,7 +45,6 @@ static WINBIO_SENSOR_INTERFACE g_SensorInterface = {
     WINBIO_ADAPTER_TYPE_SENSOR,
     sizeof(WINBIO_SENSOR_INTERFACE),
     BIO_MINI_SENSOR_ADAPTER_GUID,
-
     SensorAdapterAttach,
     SensorAdapterDetach,
     SensorAdapterClearContext,
@@ -60,34 +62,108 @@ static WINBIO_SENSOR_INTERFACE g_SensorInterface = {
     SensorAdapterControlUnitPrivileged
 };
 
-extern "C" __declspec(dllexport) HRESULT WINAPI WbioQuerySensorAdapterInterface(
+// --- ENGINE ADAPTER METHODS ---
+static HRESULT WINAPI EngineAdapterAttach(PWINBIO_PIPELINE Pipeline) { return S_OK; }
+static HRESULT WINAPI EngineAdapterDetach(PWINBIO_PIPELINE Pipeline) { return S_OK; }
+static HRESULT WINAPI EngineAdapterClearContext(PWINBIO_PIPELINE Pipeline) { return S_OK; }
+static HRESULT WINAPI EngineAdapterQueryPreferredFormat(PWINBIO_PIPELINE Pipeline, PWINBIO_REGISTERED_FORMAT StandardFormat, PWINBIO_UUID VendorFormat) {
+    if (StandardFormat) {
+        StandardFormat->Owner = WINBIO_ANSI_381_FORMAT_OWNER;
+        StandardFormat->Type = WINBIO_ANSI_381_FORMAT_TYPE;
+    }
+    return S_OK;
+}
+static HRESULT WINAPI EngineAdapterQueryIndexVectorSize(PWINBIO_PIPELINE Pipeline, PSIZE_T IndexElementCount) { if (IndexElementCount) *IndexElementCount = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterQueryHashAlgorithms(PWINBIO_PIPELINE Pipeline, PSIZE_T AlgorithmCount, PSIZE_T AlgorithmBufferSize, PUCHAR *AlgorithmBuffer) { if (AlgorithmCount) *AlgorithmCount = 0; if (AlgorithmBufferSize) *AlgorithmBufferSize = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterSetHashAlgorithm(PWINBIO_PIPELINE Pipeline, SIZE_T AlgorithmBufferSize, PUCHAR AlgorithmBuffer) { return S_OK; }
+static HRESULT WINAPI EngineAdapterQuerySampleHint(PWINBIO_PIPELINE Pipeline, PSIZE_T SampleHint) { if (SampleHint) *SampleHint = 1; return S_OK; }
+static HRESULT WINAPI EngineAdapterAcceptSampleData(PWINBIO_PIPELINE Pipeline, PWINBIO_BIR SampleBuffer, SIZE_T SampleSize, WINBIO_BIR_PURPOSE Purpose, PWINBIO_REJECT_DETAIL RejectDetail) { if (RejectDetail) *RejectDetail = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterExportEngineData(PWINBIO_PIPELINE Pipeline, WINBIO_BIR_DATA_FLAGS Flags, PWINBIO_BIR *SampleBuffer, PSIZE_T SampleSize) { return E_NOTIMPL; }
+static HRESULT WINAPI EngineAdapterVerifyFeatureSet(PWINBIO_PIPELINE Pipeline, PWINBIO_IDENTITY Identity, WINBIO_BIOMETRIC_SUBTYPE SubFactor, PBOOLEAN Match, PUCHAR *PayloadBlob, PSIZE_T PayloadBlobSize, PUCHAR *HashValue, PSIZE_T HashSize, PWINBIO_REJECT_DETAIL RejectDetail) { if (Match) *Match = TRUE; if (RejectDetail) *RejectDetail = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterIdentifyFeatureSet(PWINBIO_PIPELINE Pipeline, PWINBIO_IDENTITY Identity, PWINBIO_BIOMETRIC_SUBTYPE SubFactor, PUCHAR *PayloadBlob, PSIZE_T PayloadBlobSize, PUCHAR *HashValue, PSIZE_T HashSize, PWINBIO_REJECT_DETAIL RejectDetail) { if (RejectDetail) *RejectDetail = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterCreateEnrollment(PWINBIO_PIPELINE Pipeline) { return S_OK; }
+static HRESULT WINAPI EngineAdapterUpdateEnrollment(PWINBIO_PIPELINE Pipeline, PWINBIO_REJECT_DETAIL RejectDetail) { if (RejectDetail) *RejectDetail = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterGetEnrollmentStatus(PWINBIO_PIPELINE Pipeline, PWINBIO_REJECT_DETAIL RejectDetail) { if (RejectDetail) *RejectDetail = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterGetEnrollmentHash(PWINBIO_PIPELINE Pipeline, PUCHAR *HashValue, PSIZE_T HashSize) { if (HashSize) *HashSize = 0; return S_OK; }
+static HRESULT WINAPI EngineAdapterCheckForDuplicate(PWINBIO_PIPELINE Pipeline, PWINBIO_IDENTITY Identity, PWINBIO_BIOMETRIC_SUBTYPE SubFactor, PBOOLEAN Duplicate) { if (Duplicate) *Duplicate = FALSE; return S_OK; }
+static HRESULT WINAPI EngineAdapterCommitEnrollment(PWINBIO_PIPELINE Pipeline, PWINBIO_IDENTITY Identity, WINBIO_BIOMETRIC_SUBTYPE SubFactor, PUCHAR PayloadBlob, SIZE_T PayloadBlobSize) { return S_OK; }
+static HRESULT WINAPI EngineAdapterDiscardEnrollment(PWINBIO_PIPELINE Pipeline) { return S_OK; }
+static HRESULT WINAPI EngineAdapterControlUnit(PWINBIO_PIPELINE Pipeline, ULONG ControlCode, PUCHAR SendBuffer, SIZE_T SendBufferSize, PUCHAR ReceiveBuffer, SIZE_T ReceiveBufferSize, PSIZE_T ReceiveDataSize, PULONG OperationStatus) { return S_OK; }
+static HRESULT WINAPI EngineAdapterControlUnitPrivileged(PWINBIO_PIPELINE Pipeline, ULONG ControlCode, PUCHAR SendBuffer, SIZE_T SendBufferSize, PUCHAR ReceiveBuffer, SIZE_T ReceiveBufferSize, PSIZE_T ReceiveDataSize, PULONG OperationStatus) { return S_OK; }
+
+static WINBIO_ENGINE_INTERFACE g_EngineInterface = {
+    WINBIO_ENGINE_INTERFACE_VERSION_1,
+    WINBIO_ADAPTER_TYPE_ENGINE,
+    sizeof(WINBIO_ENGINE_INTERFACE),
+    BIO_MINI_ENGINE_ADAPTER_GUID,
+    EngineAdapterAttach,
+    EngineAdapterDetach,
+    EngineAdapterClearContext,
+    EngineAdapterQueryPreferredFormat,
+    EngineAdapterQueryIndexVectorSize,
+    EngineAdapterQueryHashAlgorithms,
+    EngineAdapterSetHashAlgorithm,
+    EngineAdapterQuerySampleHint,
+    EngineAdapterAcceptSampleData,
+    EngineAdapterExportEngineData,
+    EngineAdapterVerifyFeatureSet,
+    EngineAdapterIdentifyFeatureSet,
+    EngineAdapterCreateEnrollment,
+    EngineAdapterUpdateEnrollment,
+    EngineAdapterGetEnrollmentStatus,
+    EngineAdapterGetEnrollmentHash,
+    EngineAdapterCheckForDuplicate,
+    EngineAdapterCommitEnrollment,
+    EngineAdapterDiscardEnrollment,
+    EngineAdapterControlUnit,
+    EngineAdapterControlUnitPrivileged
+};
+
+// --- EXPORTS ---
+
+HRESULT WINAPI WbioQuerySensorInterface(
     PWINBIO_SENSOR_INTERFACE *SensorInterface
 ) {
-    if (SensorInterface == NULL) {
-        return E_POINTER;
-    }
+    if (SensorInterface == NULL) return E_POINTER;
     *SensorInterface = &g_SensorInterface;
     return S_OK;
 }
 
+HRESULT WINAPI WbioQuerySensorAdapterInterface(
+    PWINBIO_SENSOR_INTERFACE *SensorInterface
+) {
+    return WbioQuerySensorInterface(SensorInterface);
+}
+
+HRESULT WINAPI WbioQueryEngineInterface(
+    PWINBIO_ENGINE_INTERFACE *EngineInterface
+) {
+    if (EngineInterface == NULL) return E_POINTER;
+    *EngineInterface = &g_EngineInterface;
+    return S_OK;
+}
+
+HRESULT WINAPI WbioQueryEngineAdapterInterface(
+    PWINBIO_ENGINE_INTERFACE *EngineInterface
+) {
+    return WbioQueryEngineInterface(EngineInterface);
+}
+
+// --- SENSOR IMPLEMENTATION ---
+
 static HRESULT WINAPI SensorAdapterAttach(PWINBIO_PIPELINE Pipeline) {
     if (Pipeline == NULL) return E_POINTER;
-
     PADAPTER_CONTEXT context = (PADAPTER_CONTEXT)malloc(sizeof(ADAPTER_CONTEXT));
     if (!context) return E_OUTOFMEMORY;
     memset(context, 0, sizeof(ADAPTER_CONTEXT));
-
     Pipeline->SensorContext = (PWINIBIO_SENSOR_CONTEXT)context;
     return S_OK;
 }
 
 static HRESULT WINAPI SensorAdapterDetach(PWINBIO_PIPELINE Pipeline) {
     if (Pipeline == NULL || Pipeline->SensorContext == NULL) return E_POINTER;
-
     PADAPTER_CONTEXT context = (PADAPTER_CONTEXT)Pipeline->SensorContext;
-    if (context->pLastSample) {
-        free(context->pLastSample);
-    }
+    if (context->pLastSample) free(context->pLastSample);
     free(context);
     Pipeline->SensorContext = NULL;
     return S_OK;
@@ -189,7 +265,6 @@ static HRESULT WINAPI SensorAdapterFinishCapture(PWINBIO_PIPELINE Pipeline, PWIN
 static HRESULT WINAPI SensorAdapterExportSensorData(PWINBIO_PIPELINE Pipeline, PWINBIO_BIR *SampleBuffer, PSIZE_T SampleSize) {
     if (Pipeline == NULL || Pipeline->SensorContext == NULL || SampleBuffer == NULL || SampleSize == NULL) return E_POINTER;
     PADAPTER_CONTEXT context = (PADAPTER_CONTEXT)Pipeline->SensorContext;
-
     if (!context->pLastSample) return WINBIO_E_NO_CAPTURE_DATA;
 
     SIZE_T totalSize = sizeof(WINBIO_BIR) + sizeof(WINBIO_BIR_HEADER) + context->pLastSample->StandardDataBlock.Size;

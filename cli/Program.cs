@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using OpenBioMini;
 
@@ -7,6 +7,8 @@ namespace OpenBioMini.Cli {
         static int Main(string[] args) {
             Console.WriteLine("==================================================");
             Console.WriteLine("🔬 OPEN-BIOMINI CLI TOOL v1.0.0");
+            Console.WriteLine("   Criado por: Geovanni Honorato (@geohonorato)");
+            Console.WriteLine("   GitHub: https://github.com/geohonorato/open-biomini");
             Console.WriteLine("==================================================");
 
             if (args.Length == 0 || args[0] == "-h" || args[0] == "--help") {
