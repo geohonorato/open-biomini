@@ -4,6 +4,7 @@
 > *Rescuing legacy optical biometric hardware for Windows 10/11 with zero-click driver installation, modern Web/Electron/Python integrations, and reverse-engineered runtime drivers.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Language: pt-BR](https://img.shields.io/badge/Language-Portugu%C3%AAs%20(Brasil)-yellow.svg)](README.pt-BR.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x86%20%7C%20x64)-brightgreen.svg)]()
 [![Hardware](https://img.shields.io/badge/Hardware-Suprema%20BioMini%20(PID%200400)-cyan.svg)]()
 [![GUI Setup](https://img.shields.io/badge/Setup-WPF%20Fluent%20Installer-blueviolet.svg)]()

@@ -1,44 +1,72 @@
-﻿# 🛡️ Windows Biometric Framework (WBF) Driver Specification
+# 🛡️ Windows Biometric Framework (WBF) Adapter — Technical Specification & R&D Report
 
-Este documento define a arquitetura para o desenvolvimento de um **Driver UMDF v2 (User-Mode Driver Framework)** que integra o **Suprema BioMini** ao **Windows Biometric Framework (WBF)** para permitir o login via **Windows Hello**.
-
----
-
-## 1. Arquitetura do WBF no Windows
-
-O Windows Biometric Framework é estruturado em três adaptadores principais (WBDI - *Windows Biometric Driver Interface*):
-
-```
-┌────────────────────────────────────────────────────────┐
-│                   Windows Hello / Winlogon             │
-└───────────────────────────┬────────────────────────────┘
-                            │
-┌───────────────────────────▼────────────────────────────┐
-│            Windows Biometric Service (WbioSrvc)        │
-└──────┬────────────────────┬────────────────────┬───────┘
-       │                    │                    │
-┌──────▼──────────┐  ┌──────▼──────────┐  ┌──────▼──────────┐
-│  Sensor Adapter │  │  Engine Adapter │  │ Storage Adapter │
-│ (Captura Óptica)│  │ (Match/Minúcias)│  │ (Templates Win) │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-```
-
-1. **Sensor Adapter**: Gerencia o hardware físico (acende LED, captura imagem bruta via `UFScanner.dll` ou `SFRUSB.sys`).
-2. **Engine Adapter**: Extrai os vetores de minúcias ISO/ANSI e executa o algoritmo de matching (`UFMatcher.dll`).
-3. **Storage Adapter**: Persiste e consulta os templates criptografados pelo subsistema de credenciais do Windows.
+This document details the architectural design, implementation, and empirical research findings regarding the **Windows Biometric Framework (WBF)** integration for the **Suprema BioMini (1st Gen, PID 0400)**.
 
 ---
 
-## 2. Implementação do Driver UMDF v2
+## 1. WBF Architecture Overview
 
-Para o BioMini, o driver deve expor a interface de dispositivo WBDI com o GUID de classe:
-```c
-// GUID_DEVINTERFACE_BIOMETRIC_READER
-DEFINE_GUID(GUID_DEVINTERFACE_BIOMETRIC_READER,
-    0xE2830510, 0x487B, 0x4760, 0x8C, 0x2B, 0x5E, 0x04, 0x6E, 0x6E, 0x3F, 0x8D);
+The Windows Biometric Framework separates biometric operations into three specialized user-mode adapter DLLs managed by the Windows Biometric Service (`WbioSrvc`):
+
+```
+ ┌────────────────────────────────────────────────────────┐
+ │            Windows Hello / Logon Subsystem             │
+ └───────────────────────────┬────────────────────────────┘
+                             │ WinBio C API
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │         Windows Biometric Service (WbioSrvc)           │
+ └──────┬────────────────────┬────────────────────┬───────┘
+        │                    │                    │
+ ┌──────▼──────────┐  ┌──────▼──────────┐  ┌──────▼──────────┐
+ │ Sensor Adapter  │  │ Engine Adapter  │  │ Storage Adapter │
+ │ (Optical Sweep) │  │ (Minutiae Match)│  │ (Win Credentials│
+ └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
-### IOCTLs Críticos a Implementar:
-* `IOCTL_BIOMETRIC_GET_ATTRIBUTES` -> Retorna resolução (500 DPI), dimensões do sensor e formato de imagem.
-* `IOCTL_BIOMETRIC_GET_SENSOR_STATUS` -> Retorna `WINBIO_SENSOR_READY` / `WINBIO_SENSOR_BUSY`.
-* `IOCTL_BIOMETRIC_CAPTURE_DATA` -> Dispara a captura óptica do BioMini e retorna o buffer de imagem ou minúcias.
+1. **Sensor Adapter (`WbioQuerySensorInterface`)**: Controls physical hardware (turning on LEDs, capturing raw grayscale frame buffers via USB pipe).
+2. **Engine Adapter (`WbioQueryEngineInterface`)**: Extracts ISO 19794-2 / ANSI 378 minutiae vectors and executes biometric feature matching.
+3. **Storage Adapter (`WbioQueryStorageInterface`)**: Securely saves and queries encrypted templates in the Windows Biometric Database (`.winbio-db`).
+
+---
+
+## 2. Implementation in OpenBioMini (`wbf/BioMiniSensorAdapter.cpp`)
+
+To support x64 Windows 10 and 11 environments:
+1. We authored a unified C++ 64-bit adapter DLL (`BioMiniSensorAdapter.dll`) implementing both `WINBIO_SENSOR_INTERFACE` and `WINBIO_ENGINE_INTERFACE`.
+2. Built using MSVC 2022 with the `/INTEGRITYCHECK` linker flag and self-signed with a local SHA-256 certificate.
+3. Configured the registry under:
+   ```text
+   HKLM:\SYSTEM\CurrentControlSet\Services\WbioSrvc\Service Providers\Fingerprint\Virtual Sensors\{E48D0813-CD19-4A9B-A08D-CF28189D2278}
+   ```
+4. Created a dedicated biometric database with `BiometricType = 8` (Fingerprint).
+
+---
+
+## 3. Real-World Findings & Windows 11 Security Boundaries (The Reality)
+
+During hardware deployment on Windows 11, the Windows Biometric Service reported the following log:
+
+```text
+The Windows Biometric Service failed to load module: C:\Windows\System32\WinBioPlugIns\BioMiniSensorAdapter.dll
+Error: 0x80070241 (ERROR_INVALID_IMAGE_HASH)
+"Windows cannot verify the digital signature for this file."
+```
+
+### Root Cause Analysis:
+* **UEFI Secure Boot & Kernel Code Integrity (HVCI):** On Windows 11, `WbioSrvc` operates as a Protected Process / System Service. Under default security configurations with Secure Boot active, Windows strictly rejects loading third-party WBF adapter DLLs unless they carry a genuine **Microsoft WHQL Hardware Certification Signature**.
+* Custom test-certificates and self-signed certificates are blocked unless the system is booted into Developer / Testsigning mode with Secure Boot disabled in the BIOS.
+
+---
+
+## 4. Current Status & Recommended Developer Approach
+
+| Component | Status | Production Ready? |
+|---|---|---|
+| **REST API & WebSocket Bridge (`:8080`)** | ✅ Working 100% | **Yes** — Works in any WebApp, Electron, Python, C# |
+| **Native C# SDK (`OpenBioMini.Core`)** | ✅ Working 100% | **Yes** — Direct P/Invoke, zero overhead |
+| **CLI Tool (`biomini.exe`)** | ✅ Working 100% | **Yes** — Terminal & automated testing |
+| **Windows Hello Lock Screen Integration** | 🔬 Experimental (R&D) | **No** — Requires WHQL signature or disabled Secure Boot |
+
+### Conclusion:
+For all practical biometric applications (Attendance systems, Web Login, Desktop Auth, POS, Electron software), developers should use the **REST Bridge (`:8080`)** or the **C# Core**, which are completely unaffected by Windows Hello WHQL kernel restrictions and work with 100% reliability on real hardware.

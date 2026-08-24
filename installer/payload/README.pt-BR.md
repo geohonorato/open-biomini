@@ -4,6 +4,7 @@
 > *Resgate de hardware biométrico óptico para Windows 10 e 11 com instalador automatizado de 1 clique, integração moderna para Web/Electron/Python e drivers de runtime com engenharia reversa.*
 
 [![Licença: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-blue.svg)](LICENSE)
+[![Idioma: English](https://img.shields.io/badge/Language-English-yellow.svg)](README.md)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Windows%2010%20%2F%2011%20(x86%20%7C%20x64)-brightgreen.svg)]()
 [![Hardware](https://img.shields.io/badge/Hardware-Suprema%20BioMini%20(PID%200400)-cyan.svg)]()
 [![Instalador GUI](https://img.shields.io/badge/Instalador-WPF%20Fluent%20Dark-blueviolet.svg)]()
