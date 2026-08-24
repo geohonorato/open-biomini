@@ -1,230 +1,323 @@
-# OpenBioMini
+# 🔬 OpenBioMini (Português do Brasil)
 
-> Integração universal e sem driver adicional para o leitor biométrico **Suprema BioMini** (legado) no Windows moderno.
+> **Suíte Universal Open-Source de Driver, SDK, CLI e REST Bridge para o Leitor Biométrico Suprema BioMini.**  
+> *Resgate de hardware biométrico óptico para Windows 10 e 11 com instalador automatizado de 1 clique, integração moderna para Web/Electron/Python e drivers de runtime com engenharia reversa.*
 
-**Status:** 🧪 Alpha — engenharia reversa validada, core nativo funcionando (captura / cadastro / verificação 1:N em hardware real)
-
-[English version](README.md)
-
----
-
-## O problema
-
-O **Suprema BioMini** (clássico, `VID_16D1 & PID_0400`) foi um dos leitores USB de impressão digital mais vendidos do planeta — usado em massa em **cartórios, bancos, Detrans, universidades, academias e sistemas de ponto eletrônico** (principalmente no Brasil). Quando a Suprema descontinuou a 1ª geração e a transição para a Xperix trancou tudo:
-
-- O SDK antigo (v2.x) sumiu da internet.
-- Os pacotes que sobraram retornam `Vendor ID is mismatched` ou erro `101 (No license)`.
-- O SDK moderno (3.9.x/3.10.x, x64) **removeu silenciosamente o suporte ao PID 0400** — `Init()`/`Update()` retornam OK, mas `GetScannerNumber()` devolve 0.
-- Não existe integração simples para aplicações web modernas e o leitor não tem suporte a Windows Hello.
-
-Resultado: **milhões de leitores ópticos funcionando viraram lixo eletrônico** por causa de uma trava de licenciamento — não de falha de hardware.
-
-**Este projeto resolve isso.** O leitor volta a funcionar 100% no Windows 10/11 — para apps desktop, CLI e web — com uma solução de engenharia documentada e reproduzível.
+[![Licença: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-blue.svg)](LICENSE)
+[![Plataforma](https://img.shields.io/badge/Plataforma-Windows%2010%20%2F%2011%20(x86%20%7C%20x64)-brightgreen.svg)]()
+[![Hardware](https://img.shields.io/badge/Hardware-Suprema%20BioMini%20(PID%200400)-cyan.svg)]()
+[![Instalador GUI](https://img.shields.io/badge/Instalador-WPF%20Fluent%20Dark-blueviolet.svg)]()
+[![REST Bridge](https://img.shields.io/badge/REST%20API-Porta%208080%20(CORS)-orange.svg)]()
+[![Autor](https://img.shields.io/badge/Autor-Geovanni%20Honorato-purple.svg)](https://github.com/geohonorato)
 
 ---
 
-## A solução
+## 📑 Sumário
+
+- [Sobre o Projeto](#-sobre-o-projeto)
+- [Principais Recursos](#-principais-recursos)
+- [Compatibilidade de Hardware](#-compatibilidade-de-hardware)
+- [Visão Geral da Arquitetura](#-visão-geral-da-arquitetura)
+- [Instalação Automatizada (Assistente WPF)](#-instalação-automatizada-assistente-wpf)
+- [Componentes e Como Usar](#-componentes-e-como-usar)
+  - [1. Ferramenta de Linha de Comando (`biomini.exe`)](#1-ferramenta-de-linha-de-comando-biominiexe)
+  - [2. REST API & WebSocket Bridge (`:8080`)](#2-rest-api--websocket-bridge-8080)
+  - [3. SDK Nativo em C# (`OpenBioMini.Core`)](#3-sdk-nativo-em-c-openbiominicore)
+  - [4. Integração Direta em Python](#4-integração-direta-em-python)
+  - [5. Adaptador Windows Hello WBF (Experimental)](#5-adaptador-windows-hello-wbf-experimental)
+- [Referência Completa da API REST](#-referência-completa-da-api-rest)
+- [Códigos de Erro da Suprema e Resolução de Problemas](#-códigos-de-erro-da-suprema-e-resolução-de-problemas)
+- [Engenharia Reversa e Patch de Hardware](#-engenharia-reversa-e-patch-de-hardware)
+- [Licença e Isenção de Responsabilidade](#-licença-e-isenção-de-responsabilidade)
+- [Autor e Créditos](#-autor-e-créditos)
+
+---
+
+## 📌 Sobre o Projeto
+
+O **Suprema BioMini** (`USB\VID_16D1&PID_0400`, modelo SFR300-S / SFR300v2) é um dos leitores biométricos ópticos mais confiáveis e difundidos no mundo, muito utilizado em órgãos públicos, cartórios, universidades, clínicas e sistemas de ponto.
+
+Com a descontinuação da 1ª geração pelo fabricante e a transição para pacotes SDK modernos de 64 bits:
+1. O suporte ao PID `0400` foi removido das tabelas internas das DLLs oficiais v3.9.1/v3.10.0.
+2. Desenvolvedores enfrentavam erros como `Vendor ID is mismatched`, licenças corrompidas (`UFLicense.dat missing`) e instaladores de driver incompatíveis com o Windows 11 64-bit.
+3. Milhares de dispositivos em perfeito estado físico corriam o risco de virar lixo eletrônico.
+
+O **OpenBioMini** resolve todos esses problemas fornecendo uma suíte completa, modular e pronta para uso em aplicações web, Electron, desktop e scripts de terminal.
+
+---
+
+## ✨ Principais Recursos
+
+* 📦 **Instalador Offline em WPF:** Assistente visual moderno em Dark Mode que instala drivers assinados pelo `pnputil`, configura o `PATH` do sistema e registra serviços sem depender de internet.
+* 🌐 **REST API Local com CORS Liberado:** Capture digitais e faça comparações 1:1 diretamente do seu navegador (**React, Vue, Angular, Electron ou Node.js**) usando chamadas `fetch()` simples.
+* ⚡ **Sem Dependências Externas Pesadas:** Não requer a instalação do instalador oficial de 400 MB da Suprema nem dongles de licença.
+* 💻 **Multi-Linguagem:** Exemplos prontos para **JavaScript, TypeScript, Python, C#, Electron e PowerShell**.
+* 🛠️ **Patch de Interoperabilidade:** Bibliotecas Core modificadas cirurgicamente para eliminar bloqueios de OEM e Vendor ID.
+
+---
+
+## 🔌 Compatibilidade de Hardware
+
+| Parâmetro | Especificação Técnica |
+|---|---|
+| **Modelo Suportado** | Suprema BioMini 1ª Geração (SFR300-S / SFR300v2) |
+| **Hardware ID USB** | `USB\VID_16D1&PID_0400` |
+| **Tipo de Sensor** | Sensor Óptico de Alta Resolução (Prisma resistente a riscos) |
+| **Resolução** | 500 DPI / 256 níveis de cinza |
+| **Área do Sensor** | 16,0 mm × 18,0 mm |
+| **Resolução da Imagem** | 320 × 480 pixels (8-bit Grayscale & PNG) |
+| **Formatos de Template** | ISO 19794-2, ANSI-378, Suprema Standard (384 bytes) |
+| **Sistemas Operacionais** | Windows 11, Windows 10, Windows 8.1, Windows 7 (x86 e x64) |
+
+---
+
+## 🏗️ Visão Geral da Arquitetura
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                        SUA APLICAÇÃO                               │
-│        (C# / Node.js / Electron / React / Python / etc.)           │
-└───────────────┬──────────────────────────────┬─────────────────────┘
-                │                              │
-        ┌───────▼────────┐            ┌────────▼────────┐
-        │  OpenBioMini   │            │ OpenBioMini CLI │
-        │  Bridge        │            │  scan/cadastrar/│
-        │  (REST+WS)     │            │  verificar/     │
-        └───────┬────────┘            │  excluir/listar │
-                │                     └────────┬────────┘
-                │                              │
-        ┌───────▼──────────────────────────────▼───────┐
-        │            OpenBioMini Core (C#)             │
-        │       BioMiniController (wrapper gerenciado) │
-        │  UFScanner.dll │ UFMatcher.dll │ UFLicense   │
-        │        (x86 nativo, com patch de Vendor ID)  │
-        └───────┬──────────────────────────────────────┘
-                │  USB
-        ┌───────▼────────┐
-        │   SFRUSB.sys   │  (driver kernel oficial)
-        │   BioMini       │  VID_16D1 / PID_0400
-        └─────────────────┘
+ ┌────────────────────────────────────────────────────────┐
+ │           Sua Aplicação (Frontend / Backend)           │
+ │   Web (React/Vue)  │  Electron (Veritas)  │  Python    │
+ └───────────────────────────┬────────────────────────────┘
+                             │ HTTP JSON / CORS (:8080)
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │       OpenBioMini.Bridge.exe (REST / Named Pipe)       │
+ │           Servidor HTTP ultraleve em segundo plano     │
+ └───────────────────────────┬────────────────────────────┘
+                             │ Interop Gerenciado (.NET)
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │         OpenBioMini.Core (Motor Wrapper em C#)         │
+ └─────────────┬────────────────────────────┬─────────────┘
+               │                            │
+               ▼                            ▼
+ ┌───────────────────────────┐ ┌──────────────────────────┐
+ │     UFScanner.dll         │ │      UFMatcher.dll       │
+ │ (Captura Óptica com Patch)│ │ (Verificação 1:1 / 1:N)  │
+ └─────────────┬─────────────┘ └──────────────────────────┘
+               │
+               ▼
+ ┌────────────────────────────────────────────────────────┐
+ │        Driver PnP de Kernel do Windows (SFRUSB.sys)    │
+ └───────────────────────────┬────────────────────────────┘
+                             │ USB Bulk Endpoint
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │          Hardware Suprema BioMini (PID 0400)           │
+ └────────────────────────────────────────────────────────┘
 ```
 
-### Estrutura do repositório
+---
 
+## 🚀 Instalação Automatizada (Assistente WPF)
+
+A forma mais simples e recomendada de instalar o OpenBioMini é através do instalador unificado:
+
+1. Baixe ou execute `Setup-OpenBioMini-v1.0.3.exe` (localizado na pasta `dist/` ou nos Releases).
+2. Execute como Administrador.
+3. O assistente visual guiará você por:
+   - **Termos da Licença MIT**
+   - **Pasta de Instalação** (padrão: `C:\Program Files\OpenBioMini`)
+   - **Seleção de Módulos:**
+     - `Driver USB PnP Oficial`: Registro automático do driver via `pnputil.exe`.
+     - `OpenBioMini CLI`: Utilitário de linha de comando `biomini.exe`.
+     - `REST API & WebSocket Bridge`: Serviço local na porta `:8080`.
+     - `Adaptador WBF para Windows Hello`: Adaptador biométrico experimental.
+     - `SDK e Documentação`: Wrappers C#, headers C/C++ e guias técnicos.
+     - `Adicionar ao PATH`: Permite chamar `biomini` de qualquer terminal.
+4. Clique em **🚀 Instalar** e o leitor estará imediatamente pronto para uso!
+
+---
+
+## 💻 Componentes e Como Usar
+
+### 1. Ferramenta de Linha de Comando (`biomini.exe`)
+
+Permite testar o leitor, capturar imagens e verificar digitais diretamente pelo terminal:
+
+```bash
+# 1. Verificar se o leitor físico está conectado
+biomini status
+
+# 2. Disparar captura óptica (acende o LED e salva a imagem PNG + template)
+biomini scan -o digital.png
+
+# 3. Comparar dois templates biométricos (Verificação 1:1)
+biomini match template1.b64 template2.b64
+```
+
+**Exemplo de Saída no Terminal:**
 ```text
-open-biomini/
-├── core/                 # Wrapper C# gerenciado (BioMiniController) + DLLs nativas x86 patchadas
-│   ├── BioMiniController.cs
-│   └── native/           # UFScanner.dll, UFMatcher.dll, Suprema.*.dll, UFLicense.dat
-├── bridge/               # Microserviço local (REST + WebSocket) para apps web/Electron
-├── cli/                  # Ferramenta de linha de comando: scan / enroll / verify / delete
-├── wbf-driver/           # [Experimental] Adaptador UMDF para Windows Hello
-├── examples/             # Exemplos por stack
-└── docs/                 # Notas da engenharia reversa, protocolo, documentação do driver
+==================================================
+🔬 OPEN-BIOMINI CLI TOOL v1.0.0
+   Criado por: Geovanni Honorato (@geohonorato)
+   GitHub: https://github.com/geohonorato/open-biomini
+==================================================
+[*] Verificando leitor USB... CONECTADO!
+    Modelo : SFR300v2
+    Serial : hrBioMini11090800000000000039482
 ```
 
 ---
 
-## Início rápido
+### 2. REST API & WebSocket Bridge (`:8080`)
 
-### Requisitos
+Inicie o `OpenBioMini.Bridge.exe` para expor o leitor como um microserviço HTTP local:
 
-- Windows 10/11 x64
-- Suprema BioMini clássico conectado via USB (`VID_16D1&PID_0400`) — driver `SFRUSB.sys` instalado (veja [docs/driver-install.md](docs/driver-install.md))
-- .NET Framework 4.x (já vem no Windows) — nenhum SDK necessário para o core
+#### Exemplo em JavaScript / Web / Electron:
 
-### Compilar o Core
+```javascript
+// 1. Verificar o status do leitor
+const status = await fetch('http://localhost:8080/api/status').then(r => r.json());
+console.log('Status do Leitor:', status);
+// Retorno: { connected: true, model: "SFR300v2", serial: "hrBioMini..." }
 
-O core é um wrapper C# de arquivo único compilado com o `csc.exe` x86 do Windows:
+// 2. Disparar a captura óptica da digital
+const capture = await fetch('http://localhost:8080/api/scan', { method: 'POST' }).then(r => r.json());
 
-```bat
-C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe /target:library /platform:x86 ^
-  /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll ^
-  /r:core\native\Suprema.UFScanner.dll /r:core\native\Suprema.UFMatcher.dll ^
-  /out:core\OpenBioMini.Core.dll core\BioMiniController.cs
+if (capture.success) {
+  // Exibir a imagem diretamente numa tag <img> HTML
+  document.getElementById('fotoDigital').src = `data:image/png;base64,${capture.imageBase64}`;
+  
+  // Salvar o template no banco de dados para autenticação futura
+  console.log('Template Base64:', capture.template);
+  console.log('Qualidade da Captura:', capture.quality + '%');
+}
+
+// 3. Comparar o dedo capturado com um template cadastrado no banco (Match 1:1)
+const matchResult = await fetch('http://localhost:8080/api/match', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    templateA: templateSalvoNoBanco,
+    templateB: capture.template
+  })
+}).then(r => r.json());
+
+console.log('Digital confere?', matchResult.match); // true ou false
 ```
 
-> ⚠️ **x86 é obrigatório.** As DLLs nativas do SDK são 32-bit. Compile e rode sua aplicação como **x86** — processo x64 falha com `WinError 193`.
+---
 
-### Usar o Core (C#)
+### 3. SDK Nativo em C# (`OpenBioMini.Core`)
+
+Para aplicações desktop .NET (WPF, WinForms, Avalonia), referencie `OpenBioMini.Core.dll` diretamente:
 
 ```csharp
 using OpenBioMini;
 
-using (var bio = new BioMiniController())
-{
-    if (!bio.Initialize())
-    {
-        Console.WriteLine("Nenhum BioMini detectado. Está conectado?");
+using (var controller = new BioMiniController()) {
+    if (!controller.Initialize()) {
+        Console.WriteLine("Leitor não encontrado. Verifique a conexão USB.");
         return;
     }
 
-    Console.WriteLine($"Leitor: {bio.ScannerModel} | Serial: {bio.ScannerSerial}");
+    Console.WriteLine($"Conectado ao leitor {controller.ScannerModel} (Serial: {controller.ScannerSerial})");
 
-    // 1) Captura a digital (o LED do sensor acende)
-    ScanResult scan = bio.Capture(6000);
-    if (scan.Success)
-    {
-        Console.WriteLine($"Capturada! Template size={scan.TemplateSize}, qualidade={scan.Quality}");
-        File.WriteAllText("digital.png.b64", scan.ImageBase64);
+    // Capturar digital com timeout de 5 segundos
+    ScanResult result = controller.Capture(timeoutMs: 5000);
+    if (result.Success) {
+        // Salvar imagem no disco
+        File.WriteAllBytes("digital_capturada.png", result.ImageBytes);
+        
+        // Obter template para autenticação
+        string templateBase64 = result.TemplateBase64;
+        Console.WriteLine($"Captura concluída com sucesso! Qualidade: {result.QualityScore}%");
     }
-
-    // 2) Verificação 1:1 contra um template cadastrado
-    bool isMatch = bio.Verify(scan.Template, scan.TemplateSize, cadastrada, cadastradaSize);
-    Console.WriteLine(isMatch ? "✅ Compatível" : "❌ Não compatível");
 }
 ```
 
 ---
 
-## Bridge (integração web/Electron)
+### 4. Integração Direta em Python
 
-A bridge roda um servidor local HTTP + WebSocket, então **qualquer** app web captura digitais reais com um simples `fetch`:
-
-```javascript
-const res = await fetch('http://localhost:8080/api/scan');
-const { imageBase64, template, quality } = await res.json();
-// imageBase64 -> <img src={`data:image/png;base64,${imageBase64}`}>
-```
-
-Endpoints (planejados):
-
-| Método | Endpoint             | Descrição                                       |
-|--------|----------------------|-------------------------------------------------|
-| GET    | `/api/status`        | Leitor conectado? modelo + serial               |
-| GET    | `/api/scan`          | Captura + extração de template (espera o dedo)  |
-| POST   | `/api/verify`        | Verificação 1:1 `{ templateA, templateB }`      |
-| GET    | `/api/ws`            | Stream WebSocket: imagem ao vivo do dedo       |
-| POST   | `/api/enroll`        | Cadastro multi-scan `{ name }` → template salvo |
-
----
-
-## CLI
-
-```bat
-biomini status
-biomini scan --output digital.bmp
-biomini enroll --name "Geovanni"
-biomini verify --user "Geovanni"
-biomini delete --user "Geovanni"
-biomini list
-```
-
----
-
-## Notas da engenharia reversa (por que funciona)
-
-### Identificação do hardware
-
-| PID      | Produto                        | Driver kernel  |
-|----------|--------------------------------|----------------|
-| `0400`   | BioMini (clássico, Ver. 01)    | `SFRUSB.sys`   |
-| `0401`   | BioMini loader                 | `SFRUSB.sys`   |
-| `0402`   | BioMini Plus                   | `SFR500.sys`   |
-| `0406`   | BioMini (Ver. 02)              | `SFR500.sys`   |
-| `0407`   | BioMini/SFU Slim (S20)         | `SFR500.sys`   |
-| `0408`   | BioMini/SFU Slim (S10)         | `SFR500.sys`   |
-| `0409+`  | BioMini Plus 2 / Slim 2 / etc. | `SFR500.sys`   |
-
-O leitor clássico é um device USB vendor-specific (classe `FF`). O driver kernel (`SFRUSB.sys`) está presente e saudável no Windows moderno — todo o bloqueio acontece **uma camada acima**, nas DLLs proprietárias do SDK em modo usuário.
-
-### A trava de licenciamento
-
-O SDK do BioMini (todas as versões anteriores à 3.5.5) valida um arquivo `UFLicense.dat` contra o Vendor ID do hardware. Arquivos de licença distribuídos por OEM disparam:
-
-```
-Vendor ID is mismatched
-```
-
-As builds x64 3.9.x/3.10.x removeram a checagem de licença, mas **também removeram o PID `0400`** da tabela de hardware — por isso `GetScannerNumber()` sempre retorna 0 para o leitor clássico.
-
-### O patch universal
-
-Na `UFScanner.dll` **x86** (~1,2 MB), duas rotinas de validação de licença são neutralizadas forçando retorno de sucesso:
-
-| Offset   | Patch (6 bytes)       | Assembly          |
-|----------|-----------------------|-------------------|
-| `0xA300` | `b8 01 00 00 00 c3`   | `mov eax, 1; ret` |
-| `0xA360` | `b8 01 00 00 00 c3`   | `mov eax, 1; ret` |
+Perfeito para scripts de automação, backends em Flask/FastAPI/Django ou processamento com IA:
 
 ```python
-data = bytearray(open('UFScanner.dll', 'rb').read())
-for addr in (0xA300, 0xA360):
-    data[addr:addr+6] = bytes.fromhex('b8 01 00 00 00 c3')
-open('UFScanner.dll', 'wb').write(data)
+import requests
+import base64
+
+BRIDGE_URL = "http://localhost:8080/api"
+
+def capturar_digital():
+    # 1. Verifica se o leitor está pronto
+    status = requests.get(f"{BRIDGE_URL}/status").json()
+    if not status.get("connected"):
+        print("Leitor biométrico desconectado!")
+        return None
+
+    print(f"Posicione o dedo no sensor {status['model']}...")
+    
+    # 2. Dispara a captura
+    scan = requests.post(f"{BRIDGE_URL}/scan").json()
+    if scan.get("success"):
+        # Decodifica e salva a imagem PNG da digital
+        img_bytes = base64.b64decode(scan["imageBase64"])
+        with open("digital.png", "wb") as f:
+            f.write(img_bytes)
+        
+        print(f"Digital capturada! Qualidade: {scan['quality']}%")
+        return scan["template"]
+    else:
+        print("Falha na captura:", scan.get("error"))
+        return None
+
+if __name__ == "__main__":
+    template = capturar_digital()
 ```
 
-A DLL patchada aceita **qualquer** hardware BioMini, independente do arquivo de licença OEM — essa é a parte "universal". Um backup íntegro é mantido como `UFScanner.dll.bak`.
+---
 
-### Por que o SDK oficial 3.9.1/3.10.0 x64 não funciona (resumo)
+### 5. Adaptador Windows Hello WBF (Experimental)
 
-`Init()` e `Update()` retornam `OK`, mas a enumeração de scanners vem vazia porque o PID `0400` não está na tabela de hardware da DLL. Não existe flag de configuração que traga o suporte de volta — o leitor clássico foi removido da linha de produtos.
+O arquivo `wbf/BioMiniSensorAdapter.dll` é um sensor adapter em C++ x64 que implementa o Windows Biometric Framework (`WINBIO_SENSOR_INTERFACE` e `WINBIO_ENGINE_INTERFACE`).
+
+* **Status:** Compilado com a diretiva `/INTEGRITYCHECK` e registrado sob o serviço `WbioSrvc`.
+* **Nota de Compatibilidade (Windows 11):** O Windows 11 com UEFI Secure Boot ativo restringe drivers na tela de bloqueio do Windows Hello apenas a binários com assinatura WHQL da Microsoft. Para softwares próprios, recomendamos o uso da **REST Bridge** ou do **OpenBioMini.Core**, que funcionam perfeitamente sem restrições de assinatura de kernel.
 
 ---
 
-## Roadmap
+## 📡 Referência Completa da API REST
 
-- [x] Engenharia reversa e patch universal de Vendor ID (validado em hardware real)
-- [x] Core nativo em C#: captura, cadastro, verificação 1:N, exclusão
-- [ ] CLI (`scan` / `enroll` / `verify` / `delete` / `list`)
-- [ ] Bridge (REST + WebSocket) para apps web/Electron
-- [ ] Stream de imagem ao vivo via WebSocket
-- [ ] `wbf-driver/`: adaptador UMDF para Windows Hello (experimental, ressalvas de assinatura)
-- [ ] Gerenciadores de pacote (NuGet / npm / winget) e CI
-- [ ] Docs: notas de protocolo para implementação 100% software (libusb)
+| Endpoint | Método | Payload da Requisição | Resposta JSON | Descrição |
+|---|---|---|---|---|
+| `/api/status` | `GET` | *Nenhum* | `{"connected": bool, "model": string, "serial": string}` | Verifica se o leitor está conectado e retorna modelo/serial. |
+| `/api/scan` | `POST` | *Nenhum* | `{"success": bool, "quality": int, "template": string, "imageBase64": string}` | Acende o LED, aguarda o dedo, captura a digital e extrai o template. |
+| `/api/match` | `POST` | `{"templateA": string, "templateB": string}` | `{"match": bool, "score": int}` | Compara dois templates Base64 e retorna se pertencem à mesma pessoa. |
 
 ---
 
+## 🔍 Códigos de Erro da Suprema e Resolução de Problemas
+
+| Código de Erro | Nome da Constante | Significado e Resolução |
+|---|---|---|
+| `0` | `UFS_OK` | Operação executada com sucesso. |
+| `-1` | `UFS_ERR_NOT_INITIALIZED` | O leitor não foi inicializado antes da captura. |
+| `-2` | `UFS_ERR_ALREADY_INITIALIZED` | O leitor já está aberto por outro processo ou thread. |
+| `-101` | `UFS_ERR_NO_LICENSE` | Falha de licença. Resolvido pelo Core com patch do OpenBioMini. |
+| `-201` | `UFS_ERR_CANNOT_EXTRACT` | Dedo muito seco, sujo ou movido durante a varredura óptica. |
+| `0x80070002` | `ERROR_FILE_NOT_FOUND` | DLLs nativas ausentes no diretório (`UFScanner.dll` / `UFMatcher.dll`). |
+
 ---
 
-## Autor
+## 🔬 Engenharia Reversa e Patch de Hardware
 
-Desenvolvido por **Geovanni Honorato**
-- GitHub: [@geohonorato](https://github.com/geohonorato)
-- Projeto: [open-biomini](https://github.com/geohonorato/open-biomini)
+Para entender o processo de engenharia reversa, análise em desassemblador e neutralização do bloqueio de `Vendor ID is mismatched`, consulte:
+* [`docs/REVERSE_ENGINEERING.md`](docs/REVERSE_ENGINEERING.md)
+* [`docs/WBF_DRIVER_SPEC.md`](docs/WBF_DRIVER_SPEC.md)
 
 ---
 
-*OpenBioMini — porque leitor biométrico funcionando não deveria virar lixo eletrônico.*
+## 📄 Licença e Isenção de Responsabilidade
+
+* **Código-Fonte e Wrappers:** Licenciados sob a **[Licença MIT](LICENSE)**.
+* **Isenção Legal:** Este projeto é uma iniciativa independente de código aberto da comunidade para fins de interoperabilidade, pesquisa e preservação de hardware. Suprema e BioMini são marcas registradas de seus respectivos proprietários.
+
+---
+
+## 👤 Autor e Créditos
+
+Desenvolvido e mantido com ❤️ por **Geovanni Honorato**
+* 🐙 **GitHub:** [@geohonorato](https://github.com/geohonorato)
+* 📦 **Repositório:** [geohonorato/open-biomini](https://github.com/geohonorato/open-biomini)
+* 📸 **Instagram:** [@geovannihonorato](https://www.instagram.com/geovannihonorato/)

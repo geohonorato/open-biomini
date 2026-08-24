@@ -1,84 +1,157 @@
 # 🔬 OpenBioMini
 
-> **Universal Open-Source Bridge, CLI, and SDK for the Suprema BioMini USB Fingerprint Scanner.**  
-> *Rescuing legacy biometric hardware with modern REST APIs, CLI automation, and patched runtime drivers.*
+> **Universal Open-Source Driver, SDK, CLI, and REST Bridge Suite for the Suprema BioMini Fingerprint Scanner.**  
+> *Rescuing legacy optical biometric hardware for Windows 10/11 with zero-click driver installation, modern Web/Electron/Python integrations, and reverse-engineered runtime drivers.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20x86%20%7C%20x64-brightgreen.svg)]()
-[![Status](https://img.shields.io/badge/Hardware%20Status-Tested%20%26%20Working-success.svg)]()
-[![C#](https://img.shields.io/badge/.NET-C%23-purple.svg)]()
-[![REST API](https://img.shields.io/badge/REST%20API-Port%208080-orange.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x86%20%7C%20x64)-brightgreen.svg)]()
+[![Hardware](https://img.shields.io/badge/Hardware-Suprema%20BioMini%20(PID%200400)-cyan.svg)]()
+[![GUI Setup](https://img.shields.io/badge/Setup-WPF%20Fluent%20Installer-blueviolet.svg)]()
+[![REST Bridge](https://img.shields.io/badge/REST%20API-Port%208080%20(CORS)-orange.svg)]()
+[![Author](https://img.shields.io/badge/Author-Geovanni%20Honorato-purple.svg)](https://github.com/geohonorato)
+
+---
+
+## 📑 Table of Contents
+
+- [About the Project](#-about-the-project)
+- [Key Features](#-key-features)
+- [Hardware Compatibility](#-hardware-compatibility)
+- [Architecture Overview](#-architecture-overview)
+- [One-Click Installation (WPF Setup Wizard)](#-one-click-installation-wpf-setup-wizard)
+- [Components & Usage](#-components--usage)
+  - [1. CLI Automation Tool (`biomini.exe`)](#1-cli-automation-tool-biominiexe)
+  - [2. REST API & WebSocket Bridge (`:8080`)](#2-rest-api--websocket-bridge-8080)
+  - [3. Native C# SDK (`OpenBioMini.Core`)](#3-native-c-sdk-openbiominicore)
+  - [4. Python Direct Integration](#4-python-direct-integration)
+  - [5. Windows Hello WBF Adapter (Experimental)](#5-windows-hello-wbf-adapter-experimental)
+- [REST API Reference](#-rest-api-reference)
+- [Suprema Error Codes & Troubleshooting](#-suprema-error-codes--troubleshooting)
+- [Reverse Engineering Findings](#-reverse-engineering-findings)
+- [License & Disclaimer](#-license--disclaimer)
+- [Author & Credits](#-author--credits)
 
 ---
 
 ## 📌 About the Project
 
-The **Suprema BioMini** (`VID_16D1 & PID_0400`, SFR300-S) is one of the most widely deployed optical fingerprint scanners in the world. However, after the manufacturer transition and deprecation of legacy portals, developers worldwide were locked out by missing SDK downloads, license corruption errors, and `Vendor ID is mismatched` popups.
+The **Suprema BioMini** (`USB\VID_16D1&PID_0400`, SFR300-S/v2) is an industrial optical fingerprint scanner widely deployed across government, education, healthcare, and enterprise environments.
 
-**OpenBioMini** provides a complete, modern, and open-source solution:
-1. **Patched Native SDK**: Eliminates OEM Vendor ID locks and license blocks via binary patching.
-2. **REST API Bridge**: A lightweight background service (`OpenBioMini.Bridge.exe`) that exposes local HTTP endpoints (`http://localhost:8080/api/`) with CORS enabled—allowing **any WebApp, Electron app (like Veritas), Python, or Node.js service** to capture fingerprints with 3 lines of code.
-3. **CLI Automation Tool**: A standalone command-line tool (`biomini.exe`) for terminal scripts and CI/CD pipelines.
+However, after vendor deprecation and transition to newer 64-bit software suites:
+1. Legacy driver installers became inaccessible or incompatible with modern 64-bit Windows 11.
+2. The official v3.9.1/v3.10.0 SDK removed hardware support for PID `0400` from their internal device tables.
+3. Applications crashed with cryptic `Vendor ID is mismatched`, `UFLicense.dat missing`, or `Error 0x80070002` codes.
+
+**OpenBioMini** resolves all of these issues by providing a modern, plug-and-play, 100% open-source software stack that transforms your existing BioMini hardware into a fully integrated scanner ready for web applications, desktop software, and automated scripts.
 
 ---
 
-## 🏗️ Architecture
+## ✨ Key Features
+
+* 📦 **All-in-One Offline WPF Installer:** Modern Dark-Mode wizard that automatically registers signed kernel drivers via `pnputil`, adds tools to system `PATH`, and sets up services in seconds.
+* 🌐 **REST API & CORS Enabled:** Capture fingerprints, stream raw image Base64 buffers, and perform 1:1 matching from **any browser (Chrome/Edge/Firefox), Electron app, or backend service**.
+* ⚡ **Zero External Dependencies:** Standalone native binaries that do not require bulky third-party SDK installations or license dongles.
+* 💻 **Cross-Language Support:** First-class examples and wrappers for **JavaScript/TypeScript, Python, C# (.NET), Electron, and PowerShell**.
+* 🛠️ **Reverse-Engineered Runtime:** Patched native binaries that remove OEM vendor locks and license validation roadblocks.
+
+---
+
+## 🔌 Hardware Compatibility
+
+| Parameter | Specification |
+|---|---|
+| **Device Model** | Suprema BioMini 1st Gen (SFR300-S / SFR300v2) |
+| **USB Hardware ID** | `USB\VID_16D1&PID_0400` |
+| **Sensor Type** | High-precision Optical Sensor (Scratch-resistant prism) |
+| **Resolution** | 500 DPI / 256 gray levels |
+| **Platen / Sensing Area** | 16.0 mm × 18.0 mm |
+| **Image Output** | 320 × 480 pixels (Raw grayscale 8-bit & PNG) |
+| **Template Formats** | ISO 19794-2, ANSI-378, Suprema Standard (384-byte template) |
+| **Operating Systems** | Windows 11, Windows 10, Windows 8.1, Windows 7 (x86 & x64) |
+
+---
+
+## 🏗️ Architecture Overview
 
 ```
-                                  ┌────────────────────────┐
-                                  │   Web Browser / SPA    │
-                                  │ (React, Vue, Electron) │
-                                  └───────────┬────────────┘
-                                              │ HTTP JSON / CORS
-                                              ▼
-┌─────────────────────────┐       ┌────────────────────────┐
-│  Python / CLI Scripts   │──────►│  OpenBioMini.Bridge    │
-│    (biomini.exe)        │       │  (HTTP Server :8080)   │
-└─────────────────────────┘       └───────────┬────────────┘
-                                              │ C# Interop
-                                              ▼
-                                  ┌────────────────────────┐
-                                  │   OpenBioMini.Core     │
-                                  │(UFScanner + UFMatcher) │
-                                  └───────────┬────────────┘
-                                              │ Kernel I/O
-                                              ▼
-                                  ┌────────────────────────┐
-                                  │  Suprema BioMini USB   │
-                                  │ (SFR300v2 Optical HW)  │
-                                  └────────────────────────┘
+ ┌────────────────────────────────────────────────────────┐
+ │           Client Layer (Your Applications)             │
+ │  Web Apps (React/Vue) │ Electron (Veritas) │ Python    │
+ └───────────────────────────┬────────────────────────────┘
+                             │ HTTP JSON (Port 8080)
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │       OpenBioMini.Bridge.exe (REST / Named Pipe)       │
+ │            Self-hosted lightweight HTTP server         │
+ └───────────────────────────┬────────────────────────────┘
+                             │ Managed Interop (.NET)
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │         OpenBioMini.Core (C# Wrapper Engine)           │
+ └─────────────┬────────────────────────────┬─────────────┘
+               │                            │
+               ▼                            ▼
+ ┌───────────────────────────┐ ┌──────────────────────────┐
+ │     UFScanner.dll         │ │      UFMatcher.dll       │
+ │ (Patched Optical Capture) │ │ (1:1 / 1:N Verification) │
+ └─────────────┬─────────────┘ └──────────────────────────┘
+               │
+               ▼
+ ┌────────────────────────────────────────────────────────┐
+ │         Windows Kernel PnP Driver (SFRUSB.sys)         │
+ └───────────────────────────┬────────────────────────────┘
+                             │ USB Bulk Endpoint
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │         Suprema BioMini Hardware (PID 0400)            │
+ └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 One-Click Installation (WPF Setup Wizard)
 
-### 1. Requirements & Hardware Drivers
-* Windows 10 or Windows 11 (64-bit / 32-bit).
-* Suprema BioMini USB Driver (`SFRUSB.sys` / `oem286.inf`).
-* Connected **Suprema BioMini Scanner** (`USB\VID_16D1&PID_0400`).
+The fastest way to get started is using the bundled **OpenBioMini Setup Wizard**:
+
+1. Download or locate `Setup-OpenBioMini-v1.0.3.exe` from `dist/` or releases.
+2. Run as Administrator.
+3. The modern Fluent Dark setup wizard will guide you through:
+   - **MIT License Agreement**
+   - **Target Installation Folder** (default: `C:\Program Files\OpenBioMini`)
+   - **Modular Component Selection:**
+     - `Driver USB PnP Oficial`: Auto-registers kernel drivers with `pnputil.exe`.
+     - `OpenBioMini CLI`: Command-line tool `biomini.exe`.
+     - `REST API & WebSocket Bridge`: Background service on `:8080`.
+     - `Windows Hello WBF Adapter`: Experimental biometric provider.
+     - `SDK & Documentation`: C# wrappers, headers, and reverse engineering guides.
+     - `Add to System PATH`: Enables running `biomini` anywhere in terminal.
+4. Click **🚀 Install** and your scanner is immediately ready!
 
 ---
 
-### 2. Using the CLI (`biomini.exe`)
+## 💻 Components & Usage
 
-Open your terminal in `cli/` and run:
+### 1. CLI Automation Tool (`biomini.exe`)
+
+The CLI tool allows instant terminal operations, automated testing, and CI/CD validation:
 
 ```bash
-# Check hardware connection
-biomini.exe status
+# 1. Check scanner connection status
+biomini status
 
-# Capture a fingerprint and save both PNG image and Base64 template
-biomini.exe scan -o my_fingerprint.png
+# 2. Capture a fingerprint (activates optical sensor LED, waits for finger)
+biomini scan -o fingerprint.png
 
-# Compare two extracted templates (1:1 Verification)
-biomini.exe match template1.b64 template2.b64
+# 3. Match two extracted templates (1:1 Verification)
+biomini match template1.b64 template2.b64
 ```
 
-**Output Example:**
+**CLI Output Example:**
 ```text
 ==================================================
 🔬 OPEN-BIOMINI CLI TOOL v1.0.0
+   Criado por: Geovanni Honorato (@geohonorato)
+   GitHub: https://github.com/geohonorato/open-biomini
 ==================================================
 [*] Verificando leitor USB... CONECTADO!
     Modelo : SFR300v2
@@ -87,76 +160,164 @@ biomini.exe match template1.b64 template2.b64
 
 ---
 
-### 3. Using the HTTP REST Bridge (Web & Electron)
+### 2. REST API & WebSocket Bridge (`:8080`)
 
-Start the local bridge server:
-```bash
-OpenBioMini.Bridge.exe
-```
+Launch `OpenBioMini.Bridge.exe` to expose a local HTTP microservice:
 
-Now from **any web page or Electron frontend**, capture fingerprints directly:
+#### JavaScript / Web / Electron Example:
 
 ```javascript
-// 1. Check if scanner is ready
+// 1. Check scanner readiness
 const status = await fetch('http://localhost:8080/api/status').then(r => r.json());
-console.log(status); // { connected: true, model: "SFR300v2", serial: "..." }
+console.log('Scanner status:', status);
+// Output: { connected: true, model: "SFR300v2", serial: "hrBioMini..." }
 
-// 2. Trigger optical scan (LED turns on, captures physical finger)
-const scan = await fetch('http://localhost:8080/api/scan', { method: 'POST' }).then(r => r.json());
-if (scan.success) {
-  // Display image directly in an <img> tag
-  document.getElementById('myImg').src = `data:image/png;base64,${scan.imageBase64}`;
-  console.log(`Quality: ${scan.quality}%, Template: ${scan.template}`);
+// 2. Trigger biometric optical scan
+const capture = await fetch('http://localhost:8080/api/scan', { method: 'POST' }).then(r => r.json());
+
+if (capture.success) {
+  // Render captured image directly in an HTML image tag
+  document.getElementById('fingerprintView').src = `data:image/png;base64,${capture.imageBase64}`;
+  
+  // Store template for database enrollment or authentication
+  console.log('Template Base64:', capture.template);
+  console.log('Quality Score:', capture.quality);
 }
 
-// 3. Compare two templates (1:1 Match)
-const match = await fetch('http://localhost:8080/api/match', {
+// 3. Perform 1:1 Match between two templates
+const matchResult = await fetch('http://localhost:8080/api/match', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ templateA: scan1.template, templateB: scan2.template })
+  body: JSON.stringify({
+    templateA: userStoredTemplate,
+    templateB: capture.template
+  })
 }).then(r => r.json());
 
-console.log(match.match); // true / false
+console.log('Match confirmed:', matchResult.match); // true or false
 ```
+
+---
+
+### 3. Native C# SDK (`OpenBioMini.Core`)
+
+For desktop applications (.NET Framework, WPF, WinForms, Avalonia), reference `OpenBioMini.Core.dll` directly without HTTP overhead:
+
+```csharp
+using OpenBioMini;
+
+using (var controller = new BioMiniController()) {
+    if (!controller.Initialize()) {
+        Console.WriteLine("Scanner not found. Check USB connection.");
+        return;
+    }
+
+    Console.WriteLine($"Connected to {controller.ScannerModel} (Serial: {controller.ScannerSerial})");
+
+    // Capture with a 5000ms timeout
+    ScanResult result = controller.Capture(timeoutMs: 5000);
+    if (result.Success) {
+        // Save image to disk
+        File.WriteAllBytes("fingerprint.png", result.ImageBytes);
+        
+        // Template Base64
+        string templateBase64 = result.TemplateBase64;
+        Console.WriteLine($"Captured successfully! Quality: {result.QualityScore}%");
+    }
+}
+```
+
+---
+
+### 4. Python Direct Integration
+
+Integrate easily into Python scripts, Flask/Django backends, or AI pipelines:
+
+```python
+import requests
+import base64
+
+BRIDGE_URL = "http://localhost:8080/api"
+
+def capture_fingerprint():
+    # 1. Check status
+    res = requests.get(f"{BRIDGE_URL}/status").json()
+    if not res.get("connected"):
+        print("Scanner disconnected!")
+        return None
+
+    print(f"Place your finger on {res['model']}...")
+    
+    # 2. Trigger capture
+    scan = requests.post(f"{BRIDGE_URL}/scan").json()
+    if scan.get("success"):
+        # Decode and save PNG image
+        img_data = base64.b64decode(scan["imageBase64"])
+        with open("fingerprint.png", "wb") as f:
+            f.write(img_data)
+        
+        print(f"Fingerprint captured! Quality: {scan['quality']}%")
+        return scan["template"]
+    else:
+        print("Capture failed:", scan.get("error"))
+        return None
+
+if __name__ == "__main__":
+    template = capture_fingerprint()
+```
+
+---
+
+### 5. Windows Hello WBF Adapter (Experimental)
+
+`wbf/BioMiniSensorAdapter.dll` is an x64 C++ biometric sensor adapter implementing the Windows Biometric Framework (`WINBIO_SENSOR_INTERFACE` and `WINBIO_ENGINE_INTERFACE`).
+
+* **Status:** The adapter compiles with `/INTEGRITYCHECK` and configures under `WbioSrvc`.
+* **Important Note for Windows 11:** Windows 11 with UEFI Secure Boot enabled requires a Microsoft WHQL driver signature to load kernel-level biometrics in the Windows Hello lock screen. For custom software development, we recommend using the **REST Bridge** or **OpenBioMini.Core**, which work flawlessly without WHQL restrictions.
 
 ---
 
 ## 📡 REST API Reference
 
-| Endpoint | Method | Description |
+| Endpoint | Method | Request Payload | Response | Description |
+|---|---|---|---|---|
+| `/api/status` | `GET` | *None* | `{"connected": bool, "model": string, "serial": string}` | Checks scanner readiness and serial number. |
+| `/api/scan` | `POST` | *None* | `{"success": bool, "quality": int, "template": string, "imageBase64": string}` | Turns on optical sensor, captures live finger, extracts template. |
+| `/api/match` | `POST` | `{"templateA": string, "templateB": string}` | `{"match": bool, "score": int}` | Performs 1:1 biometric comparison between two Base64 templates. |
+
+---
+
+## 🔍 Suprema Error Codes & Troubleshooting
+
+| Error Code | Name | Meaning & Resolution |
 |---|---|---|
-| `/api/status` | `GET` | Returns connection status, model, and serial number |
-| `/api/scan` | `POST` | Triggers optical capture; returns PNG Base64 and ISO/ANSI template |
-| `/api/match` | `POST` | Compares two templates (`templateA`, `templateB`) and returns `{ match: true/false }` |
+| `0` | `UFS_OK` | Success. |
+| `-1` | `UFS_ERR_NOT_INITIALIZED` | Scanner was not initialized. Check if `Initialize()` was called. |
+| `-2` | `UFS_ERR_ALREADY_INITIALIZED` | Scanner handle is already active. |
+| `-101` | `UFS_ERR_NO_LICENSE` | License missing. Solved by OpenBioMini's patched core runtime. |
+| `-201` | `UFS_ERR_CANNOT_EXTRACT` | Finger placement was too dry or moved during optical sweep. |
+| `0x80070002` | `ERROR_FILE_NOT_FOUND` | Missing core DLL dependencies (`UFScanner.dll` / `UFMatcher.dll`). |
 
 ---
 
-## 🔬 Reverse Engineering & License Patch
+## 🔬 Reverse Engineering Findings
 
-For a detailed technical breakdown of how the `Vendor ID is mismatched` error was disassembled and patched at offsets `0xA300` and `0xA360` in `UFScanner.dll`, read [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
-
----
-
-## 🇧🇷 Resumo em Português
-
-O **OpenBioMini** é uma solução completa para desenvolvedores que precisam integrar o leitor biométrico **Suprema BioMini** em aplicações modernas (Web, Electron, Python, C#, Node.js). 
-
-Ele elimina a dependência dos SDKs descontinuados da fabricante e fornece:
-* **Ponte REST Local (`:8080`)**: Permite capturar e verificar digitais pelo navegador com 3 linhas de JavaScript.
-* **Ferramenta CLI (`biomini.exe`)**: Para automações de terminal e scripts.
-* **Driver Patched Universal**: Sem bloqueios de `Vendor ID` ou erro de licença.
+For a complete breakdown of disassembly offsets, binary patching of Vendor ID tables, and PnP driver migration steps, refer to:
+* [`docs/REVERSE_ENGINEERING.md`](docs/REVERSE_ENGINEERING.md)
+* [`docs/WBF_DRIVER_SPEC.md`](docs/WBF_DRIVER_SPEC.md)
 
 ---
 
-## 📄 License
+## 📄 License & Legal Disclaimer
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+* **OpenBioMini Code & Wrappers:** Licensed under the open-source **[MIT License](LICENSE)**.
+* **Disclaimer:** This project is an independent community open-source initiative created for interoperability, research, and hardware preservation. Suprema and BioMini are registered trademarks of their respective owners.
 
 ---
 
-## 👤 Author
+## 👤 Author & Credits
 
-Developed and maintained by **Geovanni Honorato**
-* GitHub: [@geohonorato](https://github.com/geohonorato)
-* Repository: [geohonorato/open-biomini](https://github.com/geohonorato/open-biomini)
-
+Developed and maintained with ❤️ by **Geovanni Honorato**
+* 🐙 **GitHub:** [@geohonorato](https://github.com/geohonorato)
+* 📦 **Repository:** [geohonorato/open-biomini](https://github.com/geohonorato/open-biomini)
+* 📸 **Instagram:** [@geovannihonorato](https://www.instagram.com/geovannihonorato/)
