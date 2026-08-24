@@ -846,7 +846,7 @@ public class MainWindow : Window {
             Text = "• Terminal / Prompt: digite 'biomini status' ou 'biomini capture'\r\n" +
                    "• REST API local: http://localhost:8080/api/status e /api/capture\r\n" +
                    "• Named Pipe local: \\\\.\\pipe\\BioMiniWbfPipe\r\n" +
-                   "• Autor: Geovanni Honorato (@geovannihonorato • github.com/geohonorato)",
+                   "• Autor: Geovanni Honorato (github.com/geohonorato/open-biomini)",
             FontSize = 12.5,
             Foreground = new SolidColorBrush(Color.FromRgb(226, 232, 240)),
             LineHeight = 22

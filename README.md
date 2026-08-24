@@ -320,4 +320,4 @@ For a complete breakdown of disassembly offsets, binary patching of Vendor ID ta
 Developed and maintained with ❤️ by **Geovanni Honorato**
 * 🐙 **GitHub:** [@geohonorato](https://github.com/geohonorato)
 * 📦 **Repository:** [geohonorato/open-biomini](https://github.com/geohonorato/open-biomini)
-* 📸 **Instagram:** [@geovannihonorato](https://www.instagram.com/geovannihonorato/)
+

@@ -320,4 +320,4 @@ Para entender o processo de engenharia reversa, análise em desassemblador e neu
 Desenvolvido e mantido com ❤️ por **Geovanni Honorato**
 * 🐙 **GitHub:** [@geohonorato](https://github.com/geohonorato)
 * 📦 **Repositório:** [geohonorato/open-biomini](https://github.com/geohonorato/open-biomini)
-* 📸 **Instagram:** [@geovannihonorato](https://www.instagram.com/geovannihonorato/)
+
