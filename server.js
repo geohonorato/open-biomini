@@ -9,9 +9,20 @@ const app = express();
 const PORT = 3300;
 const DB_FILE = path.join(__dirname, 'fingerprints.json');
 
+// Anti-cache global para que o navegador nunca sirva versões antigas de scripts
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  maxAge: 0
+}));
 
 process.on('uncaughtException', (err) => {
   console.error('[!] Erro global capturado (uncaughtException):', err.message);
@@ -218,153 +229,99 @@ app.post('/api/enroll', (req, res) => {
   res.json({ success: true, user: newUser, printed: true });
 });
 
-function compareTemplates(tpl1, tpl2) {
-  try {
-    if (!tpl1 || !tpl2) return 0;
-    const b1 = Buffer.from(tpl1, 'base64');
-    const b2 = Buffer.from(tpl2, 'base64');
-    const minLen = Math.min(b1.length, b2.length);
-    if (minLen === 0) return 0;
-
-    let matches = 0;
-    for (let i = 0; i < minLen; i++) {
-      if (b1[i] === b2[i]) matches++;
-    }
-    return Math.round((matches / minLen) * 100);
-  } catch (e) {
-    return 0;
-  }
+function matchTwoTemplates(tplA, tplB) {
+  return new Promise((resolve) => {
+    const postData = JSON.stringify({ templateA: tplA, templateB: tplB });
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/match',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 2500
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed && parsed.match === true);
+        } catch (e) {
+          resolve(false);
+        }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.write(postData);
+    req.end();
+  });
 }
 
-// 3. Verificar digital (1:N Biometric Matching com Fallback Inteligente)
-app.post('/api/verify', (req, res) => {
+// 3. Verificar digital (1:N Biometric Matching Real via Suprema UFMatcher)
+app.post('/api/verify', async (req, res) => {
   const { template } = req.body;
   const users = getDB();
 
-  if (!template || !template.length) {
+  console.log(`[VERIFY 1:N] Recebido template para verificação: ${template ? (template.substring(0, 20) + '... (' + template.length + ' chars)') : 'VAZIO'}`);
+
+  if (!template || typeof template !== 'string' || template.length < 50) {
     return res.status(400).json({
       match: false,
-      message: 'Nenhuma digital detectada. Encoste o dedo no sensor para verificar.'
+      message: 'Nenhuma digital válida detectada. Encoste o dedo no sensor.'
     });
   }
 
   if (users.length === 0) {
+    console.log('[VERIFY 1:N] Base de dados vazia (0 colaboradores). Acesso Negado.');
     return res.json({ match: false, message: 'Nenhuma digital cadastrada no sistema ainda.' });
   }
 
-  const validUsers = users.filter(u => u.template && u.template.length > 50);
-  if (validUsers.length === 0) {
-    return res.json({ match: false, message: 'Nenhuma digital válida encontrada na base.' });
-  }
+  const validUsers = users.filter(u => u.template && typeof u.template === 'string' && u.template.length > 50);
 
-  // Tenta matching via serviço nativo Suprema na porta 8080
-  const candidates = validUsers.map(u => u.template);
-  const payloadData = JSON.stringify({
-    probe: template,
-    templates: candidates
-  });
-
-  const identifyReq = http.request({
-    hostname: '127.0.0.1',
-    port: 8080,
-    path: '/api/identify',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payloadData)
-    },
-    timeout: 1500
-  }, (identifyRes) => {
-    let data = '';
-    identifyRes.on('data', chunk => data += chunk);
-    identifyRes.on('end', () => {
-      try {
-        const matchResult = JSON.parse(data);
-        if (matchResult.matched && matchResult.matchIndex >= 0 && matchResult.matchIndex < validUsers.length) {
-          const bestMatch = validUsers[matchResult.matchIndex];
-          const highestScore = matchResult.score || 98;
-
-          printReceipt('verify', bestMatch.name, bestMatch.id, highestScore);
-
-          const punchData = {
-            match: true,
-            user: { id: bestMatch.id, name: bestMatch.name },
-            score: highestScore,
-            message: `Acesso Autorizado! Identificado: ${bestMatch.name} (${highestScore}% compatibilidade)`,
-            printed: true,
-            time: new Date().toLocaleTimeString('pt-BR')
-          };
-
-          broadcastEvent('punch', punchData);
-          return res.json(punchData);
-        } else {
-          return fallbackVerify(template, validUsers, res);
-        }
-      } catch (e) {
-        return fallbackVerify(template, validUsers, res);
-      }
-    });
-  });
-
-  identifyReq.on('error', () => {
-    return fallbackVerify(template, validUsers, res);
-  });
-
-  identifyReq.on('timeout', () => {
-    identifyReq.destroy();
-    return fallbackVerify(template, validUsers, res);
-  });
-
-  identifyReq.write(payloadData);
-  identifyReq.end();
-});
-
-function fallbackVerify(probeTemplate, validUsers, res) {
-  let highestScore = 0;
   let bestMatch = null;
-
-  for (const u of validUsers) {
-    const score = compareTemplates(probeTemplate, u.template);
-    if (score > highestScore) {
-      highestScore = score;
-      bestMatch = u;
+  for (const user of validUsers) {
+    console.log(`[VERIFY 1:N] Comparando minúcias nativas com: ${user.name} (ID: ${user.id})...`);
+    const isMatch = await matchTwoTemplates(user.template, template);
+    if (isMatch) {
+      console.log(`[VERIFY 1:N] ✓ MATCH CONFIRMADO PELO SDK SUPREMA: ${user.name}!`);
+      bestMatch = user;
+      break;
+    } else {
+      console.log(`[VERIFY 1:N] ✗ Dedo não corresponde a: ${user.name}`);
     }
   }
 
-  // Se score for alto ou se é probe idêntica/demonstração
-  if (highestScore >= 60 && bestMatch) {
+  if (bestMatch) {
+    const highestScore = 98;
     printReceipt('verify', bestMatch.name, bestMatch.id, highestScore);
 
     const punchData = {
       match: true,
       user: { id: bestMatch.id, name: bestMatch.name },
       score: highestScore,
-      message: `Acesso Autorizado! Identificado: ${bestMatch.name} (${highestScore}% compatibilidade)`,
-      printed: true,
+      message: `Acesso Autorizado! Identificado: ${bestMatch.name}`,
+      printed: printingEnabled,
       time: new Date().toLocaleTimeString('pt-BR')
     };
 
     broadcastEvent('punch', punchData);
     return res.json(punchData);
   } else {
-    // Se o usuário tocou mas é demonstração com usuário cadastrado
-    const defaultUser = validUsers[0];
-    const simScore = 96;
-    printReceipt('verify', defaultUser.name, defaultUser.id, simScore);
-
-    const punchData = {
-      match: true,
-      user: { id: defaultUser.id, name: defaultUser.name },
-      score: simScore,
-      message: `Acesso Autorizado! Identificado: ${defaultUser.name} (${simScore}% compatibilidade)`,
-      printed: true,
+    console.log('[VERIFY 1:N] NENHUM colaborador correspondeu a este dedo. ACESSO NEGADO.');
+    const failData = {
+      match: false,
+      score: 0,
+      message: 'Digital não reconhecida. Acesso Negado.',
       time: new Date().toLocaleTimeString('pt-BR')
     };
-
-    broadcastEvent('punch', punchData);
-    return res.json(punchData);
+    broadcastEvent('punch_fail', failData);
+    return res.json(failData);
   }
-}
+});
 
 // 4. Apagar digital
 app.delete('/api/users/:id', (req, res) => {
