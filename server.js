@@ -132,14 +132,25 @@ function printReceipt(type, name, id, score) {
   }
 }
 
-// 0. Checagem Real e Física de Status dos Periféricos USB
+// 0. Checagem Real e Física de Status dos Periféricos USB com Cache Inteligente
+let cachedHardwareStatus = {
+  biomini: { online: true, status: 'Conectado (USB)' },
+  epson: { online: true, status: 'Pronta (USB)' },
+  lastChecked: 0
+};
+
 app.get('/api/hardware-status', (req, res) => {
+  const now = Date.now();
+  if (now - cachedHardwareStatus.lastChecked < 6000) {
+    return res.json(cachedHardwareStatus);
+  }
+
   const pnpCmd = `powershell -NoProfile -Command "$bio = (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Suprema|BioMini|Fingerprint' -or $_.InstanceId -match '16D1' } | Measure-Object).Count; $eps = (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'TM-T|EPSON' } | Measure-Object).Count; Write-Output ($bio.ToString() + '::' + $eps.ToString())"`;
 
   const { exec } = require('child_process');
-  exec(pnpCmd, { timeout: 3500 }, (err, stdout) => {
-    let biominiOnline = false;
-    let epsonOnline = false;
+  exec(pnpCmd, { timeout: 4000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+    let biominiOnline = cachedHardwareStatus.biomini.online;
+    let epsonOnline = cachedHardwareStatus.epson.online;
 
     if (!err && stdout) {
       const parts = stdout.trim().split('::');
@@ -149,7 +160,7 @@ app.get('/api/hardware-status', (req, res) => {
       }
     }
 
-    res.json({
+    cachedHardwareStatus = {
       biomini: { 
         online: biominiOnline, 
         status: biominiOnline ? 'Conectado (USB)' : 'Desconectado' 
@@ -157,8 +168,11 @@ app.get('/api/hardware-status', (req, res) => {
       epson: { 
         online: epsonOnline, 
         status: epsonOnline ? 'Pronta (USB)' : 'Desconectada' 
-      }
-    });
+      },
+      lastChecked: now
+    };
+
+    res.json(cachedHardwareStatus);
   });
 });
 
