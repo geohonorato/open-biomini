@@ -13,6 +13,14 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+process.on('uncaughtException', (err) => {
+  console.error('[!] Erro global capturado (uncaughtException):', err.message);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[!] Rejeição global capturada (unhandledRejection):', reason);
+});
+
 // SSE (Server-Sent Events) para sincronização em tempo real com o frontend
 let sseClients = [];
 
@@ -23,10 +31,22 @@ app.get('/api/events', (req, res) => {
   if (res.flushHeaders) res.flushHeaders();
 
   sseClients.push(res);
+
+  res.on('error', () => {
+    sseClients = sseClients.filter(c => c !== res);
+  });
+
   req.on('close', () => {
     sseClients = sseClients.filter(c => c !== res);
   });
 });
+
+// Heartbeat a cada 20 segundos para manter conexões SSE vivas
+setInterval(() => {
+  sseClients.forEach(c => {
+    try { c.write(': heartbeat\n\n'); } catch (e) {}
+  });
+}, 20000);
 
 function broadcastEvent(eventName, data) {
   const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
