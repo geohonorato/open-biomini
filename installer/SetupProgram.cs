@@ -1051,10 +1051,13 @@ public class MainWindow : Window {
                 }
 
                 if (doDriver) {
-                    SetProgress(60, "Registrando Driver USB PnP no Windows...");
+                    SetProgress(50, "Removendo drivers legados e conflitantes...");
+                    PurgeOldDrivers((msg) => Log(msg));
+
+                    SetProgress(65, "Registrando Driver USB PnP oficial no Windows...");
                     Log("Instalando driver PnP oficial da Suprema (sfr.inf)...");
 
-                    // Limpeza de travas antigas do registro
+                    // Limpeza profunda de travas antigas do registro
                     try {
                         using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB\VID_16D1&PID_0400", true)) {
                             if (key != null) {
@@ -1086,9 +1089,19 @@ public class MainWindow : Window {
                         using (Process p = Process.Start(psi)) {
                             string outP = p.StandardOutput.ReadToEnd();
                             p.WaitForExit();
-                            Log("pnputil: Driver PnP instalado no catálogo do sistema.");
+                            Log("pnputil: Driver oficial instalado com sucesso.");
                         }
                     }
+
+                    // Força re-escaneamento do barramento USB para vincular o hardware
+                    try {
+                        ProcessStartInfo scanPsi = new ProcessStartInfo("pnputil.exe", "/scan-devices") {
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        using (Process p = Process.Start(scanPsi)) { p.WaitForExit(); }
+                        Log("Barramento USB atualizado.");
+                    } catch { }
                 }
 
                 if (doBridge) {
@@ -1169,5 +1182,104 @@ public class MainWindow : Window {
             shortcut.Description = description;
             shortcut.Save();
         } catch { }
+    }
+
+    private static void PurgeOldDrivers(Action<string> log) {
+        try {
+            log("Analisando drivers legados no DriverStore...");
+            ProcessStartInfo psi = new ProcessStartInfo("pnputil.exe", "/enum-drivers") {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true
+            };
+
+            string output = "";
+            using (Process p = Process.Start(psi)) {
+                output = p.StandardOutput.ReadToEnd();
+                p.WaitForExit();
+            }
+
+            string[] lines = output.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            string currentOem = null;
+            string currentOriginal = null;
+            string currentProvider = null;
+            string currentClass = null;
+
+            System.Collections.Generic.List<string> oemsToDelete = new System.Collections.Generic.List<string>();
+
+            for (int i = 0; i < lines.Length; i++) {
+                string line = lines[i].Trim();
+
+                if (line.StartsWith("Nome Publicado:") || line.StartsWith("Published Name:")) {
+                    if (IsConflictingDriver(currentOriginal, currentProvider, currentClass)) {
+                        if (!string.IsNullOrEmpty(currentOem) && !oemsToDelete.Contains(currentOem)) {
+                            oemsToDelete.Add(currentOem);
+                        }
+                    }
+                    currentOem = ExtractValue(line);
+                    currentOriginal = null;
+                    currentProvider = null;
+                    currentClass = null;
+                } else if (line.StartsWith("Nome Original:") || line.StartsWith("Original Name:") || line.StartsWith("Nome do Arquivo Original:")) {
+                    currentOriginal = ExtractValue(line);
+                } else if (line.StartsWith("Nome do Provedor:") || line.StartsWith("Provider Name:")) {
+                    currentProvider = ExtractValue(line);
+                } else if (line.StartsWith("Nome da Classe:") || line.StartsWith("Class Name:")) {
+                    currentClass = ExtractValue(line);
+                }
+            }
+
+            if (IsConflictingDriver(currentOriginal, currentProvider, currentClass)) {
+                if (!string.IsNullOrEmpty(currentOem) && !oemsToDelete.Contains(currentOem)) {
+                    oemsToDelete.Add(currentOem);
+                }
+            }
+
+            foreach (string oem in oemsToDelete) {
+                log("Removendo pacote de driver conflitante: " + oem + "...");
+                ProcessStartInfo delPsi = new ProcessStartInfo("pnputil.exe", string.Format("/delete-driver {0} /uninstall /force", oem)) {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true
+                };
+                using (Process p = Process.Start(delPsi)) {
+                    p.WaitForExit();
+                }
+            }
+
+            try {
+                ProcessStartInfo remDevPsi = new ProcessStartInfo("pnputil.exe", "/remove-device \"USB\\VID_16D1&PID_0400*\"") {
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                using (Process p = Process.Start(remDevPsi)) { p.WaitForExit(); }
+            } catch { }
+
+            log("Purga de drivers legados concluída com sucesso.");
+        } catch (Exception ex) {
+            log("Aviso na purga de drivers: " + ex.Message);
+        }
+    }
+
+    private static bool IsConflictingDriver(string orig, string prov, string cls) {
+        if (string.IsNullOrEmpty(orig) && string.IsNullOrEmpty(prov)) return false;
+        string o = (orig ?? "").ToLowerInvariant();
+        string p = (prov ?? "").ToLowerInvariant();
+        string c = (cls ?? "").ToLowerInvariant();
+
+        // Remove drivers WBF que causam travamento de exclusividade
+        if (o.Contains("biomini_wbf") || p.Contains("openbiomini") || c.Contains("biometric")) return true;
+        // Remove drivers Xperix 3.x ou genéricos que não sejam o oficial Suprema 1.x
+        if (p.Contains("xperix") || (o.Contains("sfr") && !p.Contains("suprema"))) return true;
+
+        return false;
+    }
+
+    private static string ExtractValue(string line) {
+        int idx = line.IndexOf(':');
+        if (idx >= 0 && idx < line.Length - 1) {
+            return line.Substring(idx + 1).Trim();
+        }
+        return null;
     }
 }
