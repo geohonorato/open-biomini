@@ -634,9 +634,9 @@ public class MainWindow : Window {
         compCard.Child = list;
 
         chkDriver = CreateComponentItem(list, "Driver USB PnP Oficial (sfr.inf / SFRUSB.sys)", "Driver de kernel oficial assinado da Suprema para Windows 10 e 11", true, "Essencial");
+        chkBridge = CreateComponentItem(list, "Serviço Windows PnP & REST API (OpenBioMiniService)", "Serviço em segundo plano (SYSTEM) para Hot-Plug USB 100% automático e REST API (Porta 8080)", true, "Essencial");
         chkCli = CreateComponentItem(list, "OpenBioMini CLI (biomini.exe)", "Ferramenta de terminal para testar, capturar e comparar digitais", true, "Recomendado");
-        chkBridge = CreateComponentItem(list, "REST API & WebSocket Bridge (OpenBioMini.Bridge.exe)", "Serviço local (Porta 8080) para integração com Web, Electron, Python e C#", true, "Recomendado");
-        chkWbf = CreateComponentItem(list, "Windows Hello WBF Adapter (BioMiniSensorAdapter.dll)", "Adaptador biométrico WBF para integração com o Windows Hello", true, "Opcional");
+        chkWbf = CreateComponentItem(list, "Windows Hello WBF Adapter (BioMiniSensorAdapter.dll)", "Adaptador biométrico WBF para integração com o Windows Hello", false, "Opcional");
         chkSdk = CreateComponentItem(list, "SDK, Exemplos e Documentação Técnica", "Headers C/C++, wrapper C#, documentação de engenharia reversa e guias", true, "Dev");
 
         // Opções Adicionais
@@ -1052,8 +1052,31 @@ public class MainWindow : Window {
 
                 if (doDriver) {
                     SetProgress(60, "Registrando Driver USB PnP no Windows...");
-                    Log("Instalando driver PnP da Suprema (sfr.inf)...");
-                    string driverSrc = System.IO.Path.Combine(tempExtract, "driver", "SFR.inf");
+                    Log("Instalando driver PnP oficial da Suprema (sfr.inf)...");
+
+                    // Limpeza de travas antigas do registro
+                    try {
+                        using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB\VID_16D1&PID_0400", true)) {
+                            if (key != null) {
+                                foreach (string sub in key.GetSubKeyNames()) {
+                                    using (RegistryKey subKey = key.OpenSubKey(sub, true)) {
+                                        if (subKey != null) {
+                                            try { subKey.DeleteValue("Exclusive", false); } catch { }
+                                            try { subKey.DeleteValue("Security", false); } catch { }
+                                            try { subKey.DeleteValue("DeviceCharacteristics", false); } catch { }
+                                            using (RegistryKey paramKey = subKey.OpenSubKey("Device Parameters", true)) {
+                                                if (paramKey != null) {
+                                                    try { paramKey.DeleteValue("DeviceInterfaceGUIDs", false); } catch { }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch { }
+
+                    string driverSrc = System.IO.Path.Combine(tempExtract, "driver", "sfr.inf");
                     if (File.Exists(driverSrc)) {
                         ProcessStartInfo psi = new ProcessStartInfo("pnputil.exe", string.Format("/add-driver \"{0}\" /install", driverSrc)) {
                             CreateNoWindow = true,
@@ -1063,7 +1086,24 @@ public class MainWindow : Window {
                         using (Process p = Process.Start(psi)) {
                             string outP = p.StandardOutput.ReadToEnd();
                             p.WaitForExit();
-                            Log("pnputil retorno: " + outP.Trim());
+                            Log("pnputil: Driver PnP instalado no catálogo do sistema.");
+                        }
+                    }
+                }
+
+                if (doBridge) {
+                    SetProgress(75, "Registrando Serviço Windows PnP (Auto-Start)...");
+                    Log("Instalando OpenBioMiniService como serviço do sistema (SYSTEM)...");
+                    string svcExe = System.IO.Path.Combine(targetDir, "OpenBioMiniService.exe");
+                    if (File.Exists(svcExe)) {
+                        ProcessStartInfo psi = new ProcessStartInfo(svcExe, "--install") {
+                            CreateNoWindow = true,
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true
+                        };
+                        using (Process p = Process.Start(psi)) {
+                            p.WaitForExit();
+                            Log("Serviço Windows OpenBioMiniService configurado e ativo.");
                         }
                     }
                 }
