@@ -1081,7 +1081,7 @@ public class MainWindow : Window {
 
                     string driverSrc = System.IO.Path.Combine(tempExtract, "driver", "sfr.inf");
                     if (File.Exists(driverSrc)) {
-                        ProcessStartInfo psi = new ProcessStartInfo("pnputil.exe", string.Format("/add-driver \"{0}\" /install", driverSrc)) {
+                        ProcessStartInfo psi = new ProcessStartInfo(GetSystemToolPath("pnputil.exe"), string.Format("/add-driver \"{0}\" /install", driverSrc)) {
                             CreateNoWindow = true,
                             UseShellExecute = false,
                             RedirectStandardOutput = true
@@ -1095,7 +1095,7 @@ public class MainWindow : Window {
 
                     // Força re-escaneamento do barramento USB para vincular o hardware
                     try {
-                        ProcessStartInfo scanPsi = new ProcessStartInfo("pnputil.exe", "/scan-devices") {
+                        ProcessStartInfo scanPsi = new ProcessStartInfo(GetSystemToolPath("pnputil.exe"), "/scan-devices") {
                             CreateNoWindow = true,
                             UseShellExecute = false
                         };
@@ -1187,7 +1187,8 @@ public class MainWindow : Window {
     private static void PurgeOldDrivers(Action<string> log) {
         try {
             log("Analisando drivers legados no DriverStore...");
-            ProcessStartInfo psi = new ProcessStartInfo("pnputil.exe", "/enum-drivers") {
+            string pnpUtil = GetSystemToolPath("pnputil.exe");
+            ProcessStartInfo psi = new ProcessStartInfo(pnpUtil, "/enum-drivers") {
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true
@@ -1237,7 +1238,7 @@ public class MainWindow : Window {
 
             foreach (string oem in oemsToDelete) {
                 log("Removendo pacote de driver conflitante: " + oem + "...");
-                ProcessStartInfo delPsi = new ProcessStartInfo("pnputil.exe", string.Format("/delete-driver {0} /uninstall /force", oem)) {
+                ProcessStartInfo delPsi = new ProcessStartInfo(pnpUtil, string.Format("/delete-driver {0} /uninstall /force", oem)) {
                     CreateNoWindow = true,
                     UseShellExecute = false,
                     RedirectStandardOutput = true
@@ -1248,7 +1249,7 @@ public class MainWindow : Window {
             }
 
             try {
-                ProcessStartInfo remDevPsi = new ProcessStartInfo("pnputil.exe", "/remove-device \"USB\\VID_16D1&PID_0400*\"") {
+                ProcessStartInfo remDevPsi = new ProcessStartInfo(pnpUtil, "/remove-device \"USB\\VID_16D1&PID_0400*\"") {
                     CreateNoWindow = true,
                     UseShellExecute = false
                 };
@@ -1281,5 +1282,14 @@ public class MainWindow : Window {
             return line.Substring(idx + 1).Trim();
         }
         return null;
+    }
+
+    private static string GetSystemToolPath(string toolName) {
+        string windir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        string sysnative = System.IO.Path.Combine(windir, "Sysnative", toolName);
+        if (System.IO.File.Exists(sysnative)) return sysnative;
+        string system32 = System.IO.Path.Combine(windir, "System32", toolName);
+        if (System.IO.File.Exists(system32)) return system32;
+        return toolName;
     }
 }

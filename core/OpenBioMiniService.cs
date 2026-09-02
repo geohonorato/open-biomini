@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Configuration.Install;
 using System.Diagnostics;
 using System.Drawing;
@@ -185,7 +185,8 @@ namespace OpenBioMini.Service {
 
         private static void RunProcess(string file, string args) {
             try {
-                ProcessStartInfo psi = new ProcessStartInfo(file, args) {
+                string resolvedFile = GetSystemToolPath(file);
+                ProcessStartInfo psi = new ProcessStartInfo(resolvedFile, args) {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true
@@ -194,6 +195,15 @@ namespace OpenBioMini.Service {
                     p.WaitForExit();
                 }
             } catch { }
+        }
+
+        private static string GetSystemToolPath(string toolName) {
+            string windir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            string sysnative = System.IO.Path.Combine(windir, "Sysnative", toolName);
+            if (System.IO.File.Exists(sysnative)) return sysnative;
+            string system32 = System.IO.Path.Combine(windir, "System32", toolName);
+            if (System.IO.File.Exists(system32)) return system32;
+            return toolName;
         }
 
         // ==========================================
