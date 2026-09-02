@@ -198,7 +198,7 @@ app.post('/api/enroll', (req, res) => {
   res.json({ success: true, user: newUser, printed: true });
 });
 
-// 3. Verificar digital (1:N Matching de Template Base64 e Vetores)
+// 3. Verificar digital (1:N Biometric Matching Real via OpenBioMiniService / UFMatcher)
 app.post('/api/verify', (req, res) => {
   const { template } = req.body;
   const users = getDB();
@@ -214,80 +214,73 @@ app.post('/api/verify', (req, res) => {
     return res.json({ match: false, message: 'Nenhuma digital cadastrada no sistema ainda.' });
   }
 
-  let bestMatch = null;
-  let highestScore = 0;
+  const validUsers = users.filter(u => u.template && u.template.length > 50);
+  const candidates = validUsers.map(u => u.template);
 
-  for (const user of users) {
-    if (!user.template) continue;
+  const payloadData = JSON.stringify({
+    probe: template,
+    templates: candidates
+  });
 
-    // 1. Comparação exata de template Base64
-    if (typeof template === 'string' && typeof user.template === 'string') {
-      if (template === user.template) {
-        highestScore = 100;
-        bestMatch = user;
-        break;
-      }
+  const identifyReq = http.request({
+    hostname: '127.0.0.1',
+    port: 8080,
+    path: '/api/identify',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payloadData)
+    },
+    timeout: 4000
+  }, (identifyRes) => {
+    let data = '';
+    identifyRes.on('data', chunk => data += chunk);
+    identifyRes.on('end', () => {
+      try {
+        const matchResult = JSON.parse(data);
+        if (matchResult.matched && matchResult.matchIndex >= 0 && matchResult.matchIndex < validUsers.length) {
+          const bestMatch = validUsers[matchResult.matchIndex];
+          const highestScore = matchResult.score || 98;
 
-      // Comparação de similaridade de caracteres Base64
-      let matchChars = 0;
-      const len = Math.min(template.length, user.template.length);
-      for (let i = 0; i < len; i++) {
-        if (template.charCodeAt(i) === user.template.charCodeAt(i)) {
-          matchChars++;
+          // Dispara comprovante de ponto/presença na Epson TM-T20X
+          printReceipt('verify', bestMatch.name, bestMatch.id, highestScore);
+
+          const punchData = {
+            match: true,
+            user: { id: bestMatch.id, name: bestMatch.name },
+            score: highestScore,
+            message: `Acesso Autorizado! Identificado: ${bestMatch.name} (${highestScore}% compatibilidade)`,
+            printed: true,
+            time: new Date().toLocaleTimeString('pt-BR')
+          };
+
+          broadcastEvent('punch', punchData);
+          return res.json(punchData);
+        } else {
+          return res.json({
+            match: false,
+            score: 0,
+            message: 'Digital não reconhecida. Tente novamente ou cadastre o colaborador.',
+            time: new Date().toLocaleTimeString('pt-BR')
+          });
         }
+      } catch (e) {
+        return res.status(500).json({ match: false, message: 'Erro no processamento biométrico.' });
       }
-      const score = Math.round((matchChars / len) * 100);
-      if (score > highestScore) {
-        highestScore = score;
-        bestMatch = user;
-      }
-    } else if (Array.isArray(template) && Array.isArray(user.template)) {
-      // Comparação de array numérico
-      let diffSum = 0;
-      const len = Math.min(template.length, user.template.length);
-      for (let i = 0; i < len; i++) {
-        diffSum += Math.abs(template[i] - user.template[i]);
-      }
-      const avgDiff = diffSum / len;
-      const score = Math.max(0, Math.round(100 - (avgDiff * 1.5)));
-      if (score > highestScore) {
-        highestScore = score;
-        bestMatch = user;
-      }
-    } else {
-      // Comparação de fallback
-      highestScore = 98;
-      bestMatch = user;
-      break;
-    }
-  }
+    });
+  });
 
-  if (highestScore >= 70 && bestMatch) {
-    // Dispara comprovante de ponto/presença na Epson TM-T20X
-    printReceipt('verify', bestMatch.name, bestMatch.id, highestScore);
+  identifyReq.on('error', (err) => {
+    return res.status(503).json({ match: false, message: 'Serviço biométrico OpenBioMiniService offline na porta 8080.' });
+  });
 
-    const punchData = {
-      match: true,
-      user: { id: bestMatch.id, name: bestMatch.name },
-      score: highestScore,
-      message: `Acesso Autorizado! Identificado: ${bestMatch.name} (${highestScore}% compatibilidade)`,
-      printed: true,
-      time: new Date().toLocaleTimeString('pt-BR')
-    };
+  identifyReq.on('timeout', () => {
+    identifyReq.destroy();
+    return res.status(504).json({ match: false, message: 'Tempo limite esgotado no matching biométrico.' });
+  });
 
-    // Notifica instantaneamente todos os navegadores/totens abertos
-    broadcastEvent('punch', punchData);
-
-    res.json(punchData);
-  } else {
-    const failData = {
-      match: false,
-      score: highestScore,
-      message: 'Digital não reconhecida. Acesso Negado.'
-    };
-    broadcastEvent('punch_fail', failData);
-    res.json(failData);
-  }
+  identifyReq.write(payloadData);
+  identifyReq.end();
 });
 
 // 4. Apagar digital

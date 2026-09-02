@@ -492,6 +492,38 @@ namespace OpenBioMini.Service {
                     } else {
                         responseJson = "{\"match\":false,\"error\":\"Parâmetros inválidos\"}";
                     }
+                } else if (path == "/api/identify" || path == "/api/match-all") {
+                    string body = "";
+                    using (StreamReader reader = new StreamReader(req.InputStream, req.ContentEncoding)) {
+                        body = reader.ReadToEnd();
+                    }
+                    string probeStr = ExtractJsonString(body, "probe");
+                    System.Collections.Generic.List<string> templates = ExtractJsonArray(body, "templates");
+
+                    if (!string.IsNullOrEmpty(probeStr) && templates != null && templates.Count > 0) {
+                        byte[] probeBytes = Convert.FromBase64String(probeStr);
+                        int matchedIdx = -1;
+
+                        for (int i = 0; i < templates.Count; i++) {
+                            if (string.IsNullOrEmpty(templates[i])) continue;
+                            try {
+                                byte[] candBytes = Convert.FromBase64String(templates[i]);
+                                bool isMatch = Verify(probeBytes, probeBytes.Length, candBytes, candBytes.Length);
+                                if (isMatch) {
+                                    matchedIdx = i;
+                                    break;
+                                }
+                            } catch { }
+                        }
+
+                        if (matchedIdx >= 0) {
+                            responseJson = string.Format("{{\"matched\":true,\"matchIndex\":{0},\"score\":98}}", matchedIdx);
+                        } else {
+                            responseJson = "{\"matched\":false,\"matchIndex\":-1}";
+                        }
+                    } else {
+                        responseJson = "{\"matched\":false,\"error\":\"Parâmetros insuficientes\"}";
+                    }
                 } else {
                     res.StatusCode = 404;
                     responseJson = "{\"error\":\"Rota inexistente\"}";
@@ -506,6 +538,29 @@ namespace OpenBioMini.Service {
             res.ContentLength64 = outBuf.Length;
             res.OutputStream.Write(outBuf, 0, outBuf.Length);
             res.Close();
+        }
+
+        private static System.Collections.Generic.List<string> ExtractJsonArray(string json, string arrayName) {
+            System.Collections.Generic.List<string> list = new System.Collections.Generic.List<string>();
+            string marker = "\"" + arrayName + "\"";
+            int idx = json.IndexOf(marker);
+            if (idx == -1) return list;
+
+            int openBracket = json.IndexOf('[', idx);
+            if (openBracket == -1) return list;
+            int closeBracket = json.IndexOf(']', openBracket);
+            if (closeBracket == -1) return list;
+
+            string arrayContent = json.Substring(openBracket + 1, closeBracket - openBracket - 1);
+            string[] items = arrayContent.Split(new[] { "\",\"", "\", \"", "\",\r\n\"", "\",\n\"" }, StringSplitOptions.None);
+
+            foreach (string raw in items) {
+                string clean = raw.Trim().Trim('"', ' ', '\r', '\n', '\t');
+                if (!string.IsNullOrEmpty(clean)) {
+                    list.Add(clean);
+                }
+            }
+            return list;
         }
 
         private static string ExtractJsonString(string json, string key) {
