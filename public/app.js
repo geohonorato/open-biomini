@@ -833,17 +833,75 @@ function initLiveEventStream() {
           name: data.user.name,
           time: new Date().toLocaleString('pt-BR'),
           score: `${data.score}%`,
-          printer: 'EMITIDO (TM-T20X)'
+          printer: isPrinterPaused ? 'VIRTUAL (PAUSADO)' : 'EMITIDO (TM-T20X)'
         });
 
         resetPadAfterDelay(4000);
       }
     });
 
+    evtSource.addEventListener('printer_status', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        updatePrinterUI(data.enabled);
+      } catch (err) {}
+    });
+
     evtSource.addEventListener('users_changed', () => {
       updateMetrics();
       loadEmployeesTable();
     });
+  } catch (e) {}
+}
+
+// CONTROLE DE PAUSA DA IMPRESSÃO FÍSICA
+let isPrinterPaused = false;
+
+async function togglePrinterPause() {
+  try {
+    const res = await fetch('/api/printer/toggle', { method: 'POST' });
+    const data = await res.json();
+    updatePrinterUI(data.enabled);
+    if (data.enabled) {
+      playAudio('success');
+      notifyToast('🖨️ Impressão física na Epson TM-T20X ATIVADA.', 'success');
+    } else {
+      playAudio('click');
+      notifyToast('⏸️ Impressão física PAUSADA. Economizando papel dos testes!', 'info');
+    }
+  } catch (e) {
+    notifyToast('Erro ao alternar estado da impressora.', 'error');
+  }
+}
+
+function updatePrinterUI(enabled) {
+  isPrinterPaused = !enabled;
+  const btn = document.getElementById('btnPrinterToggle');
+  const label = document.getElementById('printerToggleLabel');
+  const icon = document.getElementById('printerToggleIcon');
+
+  if (btn && label && icon) {
+    if (enabled) {
+      btn.className = 'btn-printer-toggle';
+      label.innerText = 'Impressão: Ativa';
+      icon.innerText = '🖨️';
+      btn.title = 'Clique para PAUSAR a impressão física na Epson TM-T20X (Economia de Papel)';
+    } else {
+      btn.className = 'btn-printer-toggle paused';
+      label.innerText = 'Impressão: Pausada';
+      icon.innerText = '⏸️';
+      btn.title = 'Clique para REATIVAR a emissão de comprovantes na Epson TM-T20X';
+    }
+  }
+}
+
+async function checkInitialPrinterStatus() {
+  try {
+    const res = await fetch('/api/printer/status');
+    const data = await res.json();
+    if (data && typeof data.enabled === 'boolean') {
+      updatePrinterUI(data.enabled);
+    }
   } catch (e) {}
 }
 
@@ -854,5 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
   pollHardwareTelemetry();
   startAutoSensingEngine();
   initLiveEventStream();
+  checkInitialPrinterStatus();
   setInterval(pollHardwareTelemetry, 3500);
 });

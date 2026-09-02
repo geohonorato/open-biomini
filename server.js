@@ -119,7 +119,13 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
+let printingEnabled = true;
+
 function printReceipt(type, name, id, score) {
+  if (!printingEnabled) {
+    console.log(`[🖨️ Impressora Epson] Impressão FÍSICA PAUSADA (Modo Economia). Comprovante virtual emitido para: ${name}`);
+    return;
+  }
   const exePath = path.join(__dirname, 'print-receipt.exe');
   if (fs.existsSync(exePath)) {
     execFile(exePath, [type, name, id ? id.toString() : '0', score ? score.toString() : '98', 'EPSON TM-T20X Receipt6'], (err, stdout) => {
@@ -317,7 +323,25 @@ app.delete('/api/users/:id', (req, res) => {
 app.post('/api/print', (req, res) => {
   const { type, name, id, score } = req.body;
   printReceipt(type || 'verify', name || 'Teste Spooler', id || '0', score || 98);
-  res.json({ success: true });
+  res.json({ success: true, printed: printingEnabled });
+});
+
+// 6. Consultar e Alternar Pausa de Impressão Física
+app.get('/api/printer/status', (req, res) => {
+  res.json({ enabled: printingEnabled });
+});
+
+app.post('/api/printer/toggle', (req, res) => {
+  const body = req.body || {};
+  if (typeof body.enabled === 'boolean') {
+    printingEnabled = body.enabled;
+  } else {
+    printingEnabled = !printingEnabled;
+  }
+  if (typeof broadcastEvent === 'function') {
+    broadcastEvent('printer_status', { enabled: printingEnabled });
+  }
+  res.json({ success: true, enabled: printingEnabled });
 });
 
 app.listen(PORT, () => {
