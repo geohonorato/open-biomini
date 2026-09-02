@@ -387,12 +387,21 @@ namespace OpenBioMini.Service {
 
         public bool Verify(byte[] tplA, int sizeA, byte[] tplB, int sizeB) {
             lock (m_Lock) {
-                if (m_Matcher == null || tplA == null || tplB == null) return false;
+                if (m_Matcher == null || tplA == null || tplB == null) {
+                    Log(string.Format("    [VERIFY] ABORT: matcher={0} tplA={1} tplB={2}", m_Matcher != null, tplA != null, tplB != null));
+                    return false;
+                }
                 bool isMatch = false;
                 try {
+                    Log(string.Format("    [VERIFY] sizeA={0} sizeB={1} bytesA[0..3]={2:X2}{3:X2}{4:X2}{5:X2} bytesB[0..3]={6:X2}{7:X2}{8:X2}{9:X2}",
+                        sizeA, sizeB,
+                        tplA.Length > 0 ? tplA[0] : 0, tplA.Length > 1 ? tplA[1] : 0, tplA.Length > 2 ? tplA[2] : 0, tplA.Length > 3 ? tplA[3] : 0,
+                        tplB.Length > 0 ? tplB[0] : 0, tplB.Length > 1 ? tplB[1] : 0, tplB.Length > 2 ? tplB[2] : 0, tplB.Length > 3 ? tplB[3] : 0));
                     UFM_STATUS st = m_Matcher.Verify(tplA, sizeA, tplB, sizeB, out isMatch);
+                    Log(string.Format("    [VERIFY] RESULT: status={0} isMatch={1}", st, isMatch));
                     return st == UFM_STATUS.OK && isMatch;
-                } catch {
+                } catch (Exception ex) {
+                    Log(string.Format("    [VERIFY] EXCEPTION: {0}", ex.Message));
                     return false;
                 }
             }
@@ -500,20 +509,31 @@ namespace OpenBioMini.Service {
                     string probeStr = ExtractJsonString(body, "probe");
                     System.Collections.Generic.List<string> templates = ExtractJsonArray(body, "templates");
 
+                    Log(string.Format("[IDENTIFY] probeLen={0} templatesCount={1} bodyLen={2}",
+                        probeStr != null ? probeStr.Length : -1,
+                        templates != null ? templates.Count : -1,
+                        body.Length));
+
                     if (!string.IsNullOrEmpty(probeStr) && templates != null && templates.Count > 0) {
                         byte[] probeBytes = Convert.FromBase64String(probeStr);
                         int matchedIdx = -1;
+
+                        Log(string.Format("[IDENTIFY] probeBytes.Length={0}", probeBytes.Length));
 
                         for (int i = 0; i < templates.Count; i++) {
                             if (string.IsNullOrEmpty(templates[i])) continue;
                             try {
                                 byte[] candBytes = Convert.FromBase64String(templates[i]);
+                                Log(string.Format("[IDENTIFY] candidate[{0}] candBytes.Length={1} b64len={2}", i, candBytes.Length, templates[i].Length));
                                 bool isMatch = Verify(probeBytes, probeBytes.Length, candBytes, candBytes.Length);
+                                Log(string.Format("[IDENTIFY] candidate[{0}] isMatch={1}", i, isMatch));
                                 if (isMatch) {
                                     matchedIdx = i;
                                     break;
                                 }
-                            } catch { }
+                            } catch (Exception ex) {
+                                Log(string.Format("[IDENTIFY] candidate[{0}] EXCEPTION: {1}", i, ex.Message));
+                            }
                         }
 
                         if (matchedIdx >= 0) {
