@@ -404,10 +404,10 @@ function startAutoSensingEngine() {
     }
 
     try {
-      const res = await fetch('http://localhost:8080/api/scan', {
+      const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(1200)
+        signal: AbortSignal.timeout(1500)
       });
       const data = await res.json();
       if (data && data.success && data.template && data.template.length) {
@@ -461,7 +461,7 @@ async function triggerEnrollCapture() {
   try {
     let captured = null;
     try {
-      const res = await fetch('http://localhost:8080/api/scan', { method: 'POST' });
+      const res = await fetch('/api/scan', { method: 'POST' });
       const data = await res.json();
       if (data && data.success) captured = data.template;
     } catch (e) {}
@@ -678,10 +678,10 @@ async function sendTestScan() {
   notifyToast('Iniciando teste de leitura óptica no BioMini... Encoste o dedo!', 'info');
   playAudio('scan');
   try {
-    const res = await fetch('http://localhost:8080/api/scan', {
+    const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(6000)
     });
     const data = await res.json();
     if (data && data.success) {

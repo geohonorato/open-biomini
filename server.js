@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const { execFile } = require('child_process');
 
 const app = express();
@@ -11,6 +12,77 @@ const DB_FILE = path.join(__dirname, 'fingerprints.json');
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// SSE (Server-Sent Events) para sincronização em tempo real com o frontend
+let sseClients = [];
+
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  if (res.flushHeaders) res.flushHeaders();
+
+  sseClients.push(res);
+  req.on('close', () => {
+    sseClients = sseClients.filter(c => c !== res);
+  });
+});
+
+function broadcastEvent(eventName, data) {
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach(c => {
+    try { c.write(payload); } catch (e) {}
+  });
+}
+
+// 0.0 Captura Óptica Direta (Proxy para o BioMini PnP Service na porta 8080)
+app.post('/api/scan', (req, res) => {
+  const proxyReq = http.request({
+    hostname: '127.0.0.1',
+    port: 8080,
+    path: '/api/scan',
+    method: 'POST',
+    timeout: 7000
+  }, (proxyRes) => {
+    let data = '';
+    proxyRes.on('data', chunk => data += chunk);
+    proxyRes.on('end', () => {
+      try {
+        res.status(proxyRes.statusCode).json(JSON.parse(data));
+      } catch (e) {
+        res.status(500).json({ success: false, error: 'Resposta inválida do serviço PnP' });
+      }
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    res.status(503).json({ 
+      success: false, 
+      error: 'Serviço BioMini PnP não está respondendo. Inicie via Iniciar-Leitor-BioMini.bat.' 
+    });
+  });
+
+  proxyReq.on('timeout', () => {
+    proxyReq.destroy();
+    res.status(504).json({ success: false, error: 'Tempo limite esgotado aguardando o dedo no sensor.' });
+  });
+
+  proxyReq.end();
+});
+
+// 0.1 Push de Eventos PnP em Tempo Real do BioMiniPnPService
+app.post('/api/hardware-status-update', (req, res) => {
+  const { biomini } = req.body;
+  if (typeof broadcastEvent === 'function') {
+    broadcastEvent('hardware_status', {
+      biomini: {
+        online: !!biomini,
+        status: biomini ? 'Conectado (USB PnP)' : 'Desconectado'
+      }
+    });
+  }
+  res.json({ ok: true });
+});
 
 function getDB() {
   if (!fs.existsSync(DB_FILE)) {
@@ -169,28 +241,6 @@ app.post('/api/verify', (req, res) => {
       break;
     }
   }
-
-// SSE (Server-Sent Events) para sincronização em tempo real com o frontend
-let sseClients = [];
-
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  if (res.flushHeaders) res.flushHeaders();
-
-  sseClients.push(res);
-  req.on('close', () => {
-    sseClients = sseClients.filter(c => c !== res);
-  });
-});
-
-function broadcastEvent(eventName, data) {
-  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
-  sseClients.forEach(c => {
-    try { c.write(payload); } catch (e) {}
-  });
-}
 
   if (highestScore >= 70 && bestMatch) {
     // Dispara comprovante de ponto/presença na Epson TM-T20X
