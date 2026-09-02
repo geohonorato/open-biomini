@@ -170,23 +170,53 @@ app.post('/api/verify', (req, res) => {
     }
   }
 
+// SSE (Server-Sent Events) para sincronização em tempo real com o frontend
+let sseClients = [];
+
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  if (res.flushHeaders) res.flushHeaders();
+
+  sseClients.push(res);
+  req.on('close', () => {
+    sseClients = sseClients.filter(c => c !== res);
+  });
+});
+
+function broadcastEvent(eventName, data) {
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach(c => {
+    try { c.write(payload); } catch (e) {}
+  });
+}
+
   if (highestScore >= 70 && bestMatch) {
     // Dispara comprovante de ponto/presença na Epson TM-T20X
     printReceipt('verify', bestMatch.name, bestMatch.id, highestScore);
 
-    res.json({
+    const punchData = {
       match: true,
       user: { id: bestMatch.id, name: bestMatch.name },
       score: highestScore,
       message: `Acesso Autorizado! Identificado: ${bestMatch.name} (${highestScore}% compatibilidade)`,
-      printed: true
-    });
+      printed: true,
+      time: new Date().toLocaleTimeString('pt-BR')
+    };
+
+    // Notifica instantaneamente todos os navegadores/totens abertos
+    broadcastEvent('punch', punchData);
+
+    res.json(punchData);
   } else {
-    res.json({
+    const failData = {
       match: false,
       score: highestScore,
       message: 'Digital não reconhecida. Acesso Negado.'
-    });
+    };
+    broadcastEvent('punch_fail', failData);
+    res.json(failData);
   }
 });
 
@@ -199,6 +229,7 @@ app.delete('/api/users/:id', (req, res) => {
 
   if (users.length !== beforeLen) {
     saveDB(users);
+    broadcastEvent('users_changed', { count: users.length });
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Usuário não encontrado' });

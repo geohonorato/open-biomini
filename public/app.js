@@ -772,11 +772,73 @@ async function pollHardwareTelemetry() {
   }
 }
 
+// 13. STREAM DE EVENTOS EM TEMPO REAL (SSE) DO SENSOR FÍSICO
+function initLiveEventStream() {
+  try {
+    const evtSource = new EventSource('/api/events');
+
+    evtSource.addEventListener('punch', (e) => {
+      const data = JSON.parse(e.data);
+      if (data && data.match) {
+        console.log('[🖐️ SSE] Ponto disparado pelo sensor físico:', data);
+        const pad = document.getElementById('kioskPad');
+        const caption = document.getElementById('padCaption');
+        const credPopup = document.getElementById('credentialPopup');
+        const radarText = document.getElementById('radarStatusText');
+
+        if (pad) pad.className = 'biometric-pad success';
+        if (caption) caption.innerText = `✓ Acesso Liberado: ${data.user.name}`;
+        if (radarText) radarText.innerText = 'ACESSO LIBERADO (SENSOR FÍSICO)';
+
+        spawnMinutiaeNodes();
+
+        if (credPopup) {
+          credPopup.classList.remove('hidden');
+          const av = document.getElementById('credAvatar');
+          const nm = document.getElementById('credName');
+          const cid = document.getElementById('credId');
+          const sc = document.getElementById('credScore');
+          const tm = document.getElementById('credTime');
+          if (av) av.innerText = getInitials(data.user.name);
+          if (nm) nm.innerText = data.user.name;
+          if (cid) cid.innerText = `ID #${data.user.id} • Suprema BioMini 1:N`;
+          if (sc) sc.innerText = `${data.score}% MATCH`;
+          if (tm) tm.innerText = data.time;
+        }
+
+        playAudio('success');
+        notifyToast(`Ponto registrado para ${data.user.name}! Comprovante impresso na Epson TM-T20X.`, 'success');
+
+        todayPunchesCount++;
+        const statPunches = document.getElementById('statTodayPunches');
+        if (statPunches) statPunches.innerText = todayPunchesCount;
+
+        addFeedItem(data.user.name, data.user.id, data.time);
+        todayLogs.unshift({
+          status: 'AUTORIZADO',
+          name: data.user.name,
+          time: new Date().toLocaleString('pt-BR'),
+          score: `${data.score}%`,
+          printer: 'EMITIDO (TM-T20X)'
+        });
+
+        resetPadAfterDelay(4000);
+      }
+    });
+
+    evtSource.addEventListener('users_changed', () => {
+      updateMetrics();
+      loadEmployeesTable();
+    });
+  } catch (e) {}
+}
+
 // INICIALIZAÇÃO
 document.addEventListener('DOMContentLoaded', () => {
   startLiveClock();
   updateMetrics();
   pollHardwareTelemetry();
   startAutoSensingEngine();
+  initLiveEventStream();
   setInterval(pollHardwareTelemetry, 3500);
 });
