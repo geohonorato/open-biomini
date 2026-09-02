@@ -270,43 +270,51 @@ async function executePunchVerification(providedTemplate = null) {
   try {
     let scannedTemplate = providedTemplate;
 
-    // Se não foi fornecido template, tenta buscar da Bridge do BioMini (:8080)
+    // Se não foi fornecido template (ex: clique manual no pad), dispara captura óptica real
     if (!scannedTemplate) {
       try {
-        const scanPromise = fetch('http://localhost:8080/api/scan', {
+        const scanRes = await fetch('/api/scan', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(6000)
         });
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
-        const scanRes = await Promise.race([scanPromise, timeoutPromise]);
         const scanData = await scanRes.json();
-        if (scanData && scanData.success) scannedTemplate = scanData.template;
-      } catch (e) {}
+        if (scanData && scanData.success && scanData.template) {
+          scannedTemplate = scanData.template;
+        } else {
+          if (pad) pad.className = 'biometric-pad error';
+          if (caption) caption.innerText = scanData.error || 'Nenhum dedo detectado no sensor óptico.';
+          if (radarText) radarText.innerText = 'SENSOR VAZIO';
+          clearMinutiaeNodes();
+          playAudio('error');
+          resetPadAfterDelay(2000);
+          return;
+        }
+      } catch (e) {
+        if (pad) pad.className = 'biometric-pad error';
+        if (caption) caption.innerText = 'Tempo limite esgotado ou leitor inacessível.';
+        if (radarText) radarText.innerText = 'FALHA DE COMUNICAÇÃO';
+        clearMinutiaeNodes();
+        playAudio('error');
+        resetPadAfterDelay(2000);
+        return;
+      }
     }
 
-    // 2. Busca lista de usuários cadastrados
-    const usersRes = await fetch('/api/users');
-    const users = await usersRes.json();
-
-    if (users.length === 0) {
+    if (!scannedTemplate || !scannedTemplate.length) {
       if (pad) pad.className = 'biometric-pad error';
-      if (caption) caption.innerText = 'Nenhum colaborador cadastrado. Cadastre o primeiro!';
+      if (caption) caption.innerText = 'Nenhuma amostra biométrica capturada.';
       clearMinutiaeNodes();
       playAudio('error');
-      notifyToast('Base de colaboradores vazia.', 'error');
-      resetPadAfterDelay(3000);
+      resetPadAfterDelay(2000);
       return;
     }
 
-    // Se não há template físico, usa o primeiro para fallback de demonstração
-    const templateToVerify = (scannedTemplate && scannedTemplate.length) 
-      ? scannedTemplate 
-      : users[0].template;
-
+    // 2. Envia a amostra real capturada para matching 1:N no backend
     const verifyRes = await fetch('/api/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: templateToVerify })
+      body: JSON.stringify({ template: scannedTemplate })
     });
 
     const data = await verifyRes.json();
@@ -459,28 +467,34 @@ async function triggerEnrollCapture() {
   playAudio('scan');
 
   try {
-    let captured = null;
-    try {
-      const res = await fetch('/api/scan', { method: 'POST' });
-      const data = await res.json();
-      if (data && data.success) captured = data.template;
-    } catch (e) {}
+    const res = await fetch('/api/scan', { method: 'POST' });
+    const data = await res.json();
 
-    const name = nameInput.value.trim() || 'Novo Colaborador';
-    currentEnrollTemplate = captured || generateFallbackVector(name);
-
-    pad.className = 'enroll-pad-wrapper success';
-    title.innerText = '✓ Amostra Biométrica Coletada!';
-    desc.innerText = 'Minúcias ISO/ANSI gravadas em buffer com 99% de fidelidade.';
-    qBar.style.display = 'block';
-
-    playAudio('success');
-    validateEnrollForm();
+    if (data && data.success && data.template) {
+      currentEnrollTemplate = data.template;
+      pad.className = 'enroll-pad-wrapper success';
+      title.innerText = '✓ Amostra Biométrica Coletada!';
+      desc.innerText = `Minúcias ISO/ANSI gravadas em buffer (${data.templateSize || 512} bytes).`;
+      qBar.style.display = 'block';
+      playAudio('success');
+      validateEnrollForm();
+    } else {
+      currentEnrollTemplate = null;
+      pad.className = 'enroll-pad-wrapper';
+      title.innerText = 'Falha na leitura óptica';
+      desc.innerText = data.error || 'Nenhum dedo detectado. Mantenha o dedo firme na lente.';
+      qBar.style.display = 'none';
+      playAudio('error');
+      validateEnrollForm();
+    }
   } catch (e) {
+    currentEnrollTemplate = null;
     pad.className = 'enroll-pad-wrapper';
-    title.innerText = 'Falha na coleta.';
-    desc.innerText = 'Tente posicionar o dedo novamente.';
+    title.innerText = 'Erro de comunicação';
+    desc.innerText = 'Não foi possível conectar ao leitor. Verifique o cabo USB.';
+    qBar.style.display = 'none';
     playAudio('error');
+    validateEnrollForm();
   }
 }
 
@@ -598,10 +612,10 @@ function filterEmployeeTable(query) {
 
 async function reprintTicketAction(name, id) {
   try {
-    await fetch('/api/verify', {
+    await fetch('/api/print', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: generateFallbackVector(name) })
+      body: JSON.stringify({ type: 'verify', name, id, score: 99 })
     });
     playAudio('success');
     notifyToast(`Reimprimindo comprovante de ${name} na Epson TM-T20X...`, 'success');
@@ -662,10 +676,10 @@ function clearLogsHistory() {
 // 10. DIAGNÓSTICO: TEST PRINT EPSON & TEST SCAN BIOMINI
 async function sendTestPrint() {
   try {
-    await fetch('/api/verify', {
+    await fetch('/api/print', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: generateFallbackVector('Teste Spooler') })
+      body: JSON.stringify({ type: 'verify', name: 'Teste de Guilhotina', id: '001', score: 99 })
     });
     playAudio('success');
     notifyToast('Cupom de teste enviado para a Epson TM-T20X com corte de papel!', 'success');

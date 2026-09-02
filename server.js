@@ -313,6 +313,13 @@ app.delete('/api/users/:id', (req, res) => {
   }
 });
 
+// 5. Impressão de cupom avulso / teste na Epson TM-T20X
+app.post('/api/print', (req, res) => {
+  const { type, name, id, score } = req.body;
+  printReceipt(type || 'verify', name || 'Teste Spooler', id || '0', score || 98);
+  res.json({ success: true });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor de Biometria rodando em http://localhost:${PORT}`);
 });
