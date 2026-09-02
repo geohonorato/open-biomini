@@ -1,6 +1,0 @@
-LIBRARY BioMiniSensorAdapter
-EXPORTS
-    WbioQuerySensorInterface
-    WbioQuerySensorAdapterInterface
-    WbioQueryEngineInterface
-    WbioQueryEngineAdapterInterface
