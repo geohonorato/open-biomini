@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veritas — Terminal Biométrico & Gestão de Ponto</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- BACKGROUND AMBIENTE -->
+  <div class="ambient-background">
+    <div class="ambient-glow glow-top"></div>
+    <div class="ambient-glow glow-bottom"></div>
+    <div class="grid-texture"></div>
+  </div>
+
+  <div class="dashboard-layout">
+    <!-- BARRA LATERAL (SIDEBAR) -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M12 2a10 10 0 0 0-10 10c0 3 1.5 5.5 3.5 7.5"></path>
+              <path d="M12 6a6 6 0 0 0-6 6c0 2 1 3.5 2.5 5"></path>
+              <path d="M12 10a2 2 0 0 0-2 2c0 1 .5 2 1.5 3"></path>
+              <path d="M12 14v4"></path>
+              <path d="M15.5 19.5c1.5-1.5 2.5-3.5 2.5-5.5a6 6 0 0 0-4.5-5.8"></path>
+              <path d="M19 18c1.8-2 3-4.5 3-8a10 10 0 0 0-6.5-9.3"></path>
+            </svg>
+          </div>
+          <div class="brand-info">
+            <h2>VERITAS</h2>
+            <span class="version-tag">BIOMETRIA v2.0</span>
+          </div>
+        </div>
+      </div>
+
+      <nav class="sidebar-menu">
+        <div class="menu-category">PRINCIPAL</div>
+        <button class="nav-item active" onclick="switchView('kiosk')">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Terminal de Ponto</span>
+          <span class="nav-pill live">LIVE</span>
+        </button>
+        <button class="nav-item" onclick="switchView('enroll')">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">Cadastrar Digital</span>
+        </button>
+        <button class="nav-item" onclick="switchView('employees')">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Colaboradores</span>
+          <span class="nav-counter" id="sidebarCount">0</span>
+        </button>
+
+        <div class="menu-category">SISTEMA</div>
+        <button class="nav-item" onclick="switchView('logs')">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Histórico de Registros</span>
+        </button>
+        <button class="nav-item" onclick="switchView('peripherals')">
+          <span class="nav-icon">🖨️</span>
+          <span class="nav-label">Hardware & Epson</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="hardware-compact-card">
+          <div class="hw-item">
+            <span class="hw-dot dot-gray" id="dotBioMini"></span>
+            <span class="hw-name">BioMini Óptico</span>
+            <span class="hw-state" id="stateBioMini">Checando...</span>
+          </div>
+          <div class="hw-item">
+            <span class="hw-dot dot-gray" id="dotEpson"></span>
+            <span class="hw-name">Epson TM-T20X</span>
+            <span class="hw-state" id="stateEpson">Checando...</span>
+          </div>
+        </div>
+        <div class="author-credits">
+          Desenvolvido por <b>Geovanni Honorato</b>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL (MAIN CANVAS) -->
+    <main class="main-content">
+      <!-- HEADER SUPERIOR DO DASHBOARD -->
+      <header class="top-header">
+        <div class="header-left">
+          <h1 id="pageTitle">Terminal de Ponto & Autenticação</h1>
+          <p id="pageDescription">Operação contínua de autenticação 1:N com emissão de comprovante térmico</p>
+        </div>
+
+        <div class="header-right">
+          <!-- BOTÃO PAUSAR / ATIVAR IMPRESSÃO FÍSICA -->
+          <button class="btn-printer-toggle" id="btnPrinterToggle" onclick="togglePrinterPause()" title="Pausar ou Ativar Impressão Física na Epson TM-T20X (Economia de Papel)">
+            <span class="printer-icon" id="printerToggleIcon">🖨️</span>
+            <span class="printer-status-label" id="printerToggleLabel">Impressão: Ativa</span>
+          </button>
+
+          <!-- BOTÃO MODO TOTEM / FULLSCREEN -->
+          <button class="btn-totem-toggle" id="btnTotemToggle" onclick="toggleTotemMode()" title="Alternar Modo Totem Fullscreen">
+            <span class="totem-icon">🖥️</span>
+            <span class="totem-text">Modo Totem</span>
+          </button>
+
+          <!-- WIDGET DE DATA E HORA -->
+          <div class="clock-widget">
+            <div class="live-time" id="liveClock">00:00:00</div>
+            <div class="live-date" id="liveDate">02 de Setembro de 2026</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW 1: TERMINAL DE PONTO (QUIOSQUE SPLIT) -->
+      <div id="view-kiosk" class="view-panel active">
+        <div class="kiosk-grid">
+          <!-- COLUNA ESQUERDA: ARENA BIOMÉTRICA HOLOGRÁFICA COM HUD SCI-FI -->
+          <div class="kiosk-scanner-card">
+            <div class="scanner-card-header">
+              <span class="section-badge"><span class="badge-dot-live"></span> SUPREMA BIOMINI 1:N</span>
+              <div class="radar-status">
+                <span class="pulse-beacon"></span>
+                <span id="radarStatusText">SENSOR EM ESPERA (TOUCH ATIVO)</span>
+              </div>
+            </div>
+
+            <div class="scanner-arena">
+              <!-- MOLDURA HUD SCI-FI COM RETÍCULAS -->
+              <div class="hud-scanner-wrapper">
+                <div class="hud-corner corner-tl"></div>
+                <div class="hud-corner corner-tr"></div>
+                <div class="hud-corner corner-bl"></div>
+                <div class="hud-corner corner-br"></div>
+
+                <!-- ANÉIS GIROSCÓPICOS HOLOGRÁFICOS -->
+                <div class="gyro-ring gyro-outer"></div>
+                <div class="gyro-ring gyro-middle"></div>
+                <div class="gyro-ring gyro-inner"></div>
+
+                <!-- PAD BIOMÉTRICO ÓPTICO -->
+                <div class="biometric-pad" id="kioskPad" onclick="triggerPunchAuth()">
+                  <div class="pad-laser"></div>
+                  
+                  <!-- CAMADA DINÂMICA DE MINÚCIAS BIOMÉTRICAS -->
+                  <div class="minutiae-layer" id="minutiaeLayer"></div>
+
+                  <div class="pad-concentric-circles">
+                    <div class="circle c1"></div>
+                    <div class="circle c2"></div>
+                    <div class="circle c3"></div>
+                  </div>
+                  <div class="fingerprint-vector">
+                    <div class="fp-custom-icon"></div>
+                  </div>
+                  <div class="haptic-glow"></div>
+                </div>
+              </div>
+
+              <!-- OSCILOSCÓPIO / EQUALIZADOR DE SINAL BIOMÉTRICO -->
+              <div class="oscilloscope-wrap">
+                <div class="osc-label">OPTICAL SIGNAL WAVEFORM</div>
+                <div class="osc-bars" id="oscBars">
+                  <span class="bar b1"></span>
+                  <span class="bar b2"></span>
+                  <span class="bar b3"></span>
+                  <span class="bar b4"></span>
+                  <span class="bar b5"></span>
+                  <span class="bar b6"></span>
+                  <span class="bar b7"></span>
+                  <span class="bar b8"></span>
+                  <span class="bar b9"></span>
+                  <span class="bar b10"></span>
+                  <span class="bar b11"></span>
+                  <span class="bar b12"></span>
+                </div>
+              </div>
+
+              <div class="pad-caption" id="padCaption">
+                Encoste o dedo no leitor físico ou clique para validar
+              </div>
+
+              <!-- MINI TELEMETRIA HUD DE LEITURA -->
+              <div class="sensor-specs-strip">
+                <div class="spec-item"><span class="s-key">DPI</span> <span class="s-val">500</span></div>
+                <div class="spec-item"><span class="s-key">LATENCY</span> <span class="s-val">0.18s</span></div>
+                <div class="spec-item"><span class="s-key">LIVENESS</span> <span class="s-val">LFD 2.0</span></div>
+                <div class="spec-item"><span class="s-key">ENGINE</span> <span class="s-val">x86 CORE</span></div>
+              </div>
+            </div>
+
+            <!-- CRACHÁ DE AUTENTICAÇÃO EXPANDIDO -->
+            <div class="credential-popup hidden" id="credentialPopup">
+              <div class="cred-header">
+                <div class="cred-avatar" id="credAvatar">GH</div>
+                <div class="cred-info">
+                  <h3 id="credName">Geovanni Honorato</h3>
+                  <p id="credId">ID #1788294449602 • Colaborador</p>
+                </div>
+                <div class="cred-badge" id="credScore">100% MATCH</div>
+              </div>
+
+              <div class="cred-metrics">
+                <div class="metric-box">
+                  <span class="m-lbl">HORÁRIO DO REGISTRO</span>
+                  <span class="m-val" id="credTime">08:30:15</span>
+                </div>
+                <div class="metric-box">
+                  <span class="m-lbl">COMPROVANTE TÉRMICO</span>
+                  <span class="m-val print-badge" onclick="openReceiptPreview()">🧾 Ver Comprovante ↗</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COLUNA DIREITA: ESTATÍSTICAS, GRÁFICO DE PICOS E LOGS DO DIA -->
+          <div class="kiosk-feed-card">
+            <div class="metrics-row">
+              <div class="stat-card">
+                <div class="stat-icon icon-blue">👥</div>
+                <div class="stat-info">
+                  <span class="stat-num" id="statEmployees">0</span>
+                  <span class="stat-lbl">Cadastrados</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon icon-green">⚡</div>
+                <div class="stat-info">
+                  <span class="stat-num" id="statTodayPunches">0</span>
+                  <span class="stat-lbl">Pontos Hoje</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon icon-purple">🖨️</div>
+                <div class="stat-info">
+                  <span class="stat-num">TM-T20X</span>
+                  <span class="stat-lbl">Epson Spooler</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- NOVO WIDGET: GRÁFICO DE DENSIDADE DE HORÁRIOS (RUSH HOURS) -->
+            <div class="density-chart-section">
+              <div class="chart-header">
+                <h4>Fluxo de Presença por Turno</h4>
+                <span class="chart-badge">PICO: MANHÃ (08H-09H)</span>
+              </div>
+              <div class="density-bars-row">
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 35%;"></div>
+                  <span class="d-label">07h</span>
+                </div>
+                <div class="density-bar-col active-rush">
+                  <div class="d-bar" style="height: 95%;"></div>
+                  <span class="d-label">08h</span>
+                </div>
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 45%;"></div>
+                  <span class="d-label">09h</span>
+                </div>
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 20%;"></div>
+                  <span class="d-label">10h</span>
+                </div>
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 60%;"></div>
+                  <span class="d-label">12h</span>
+                </div>
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 75%;"></div>
+                  <span class="d-label">13h</span>
+                </div>
+                <div class="density-bar-col active-rush">
+                  <div class="d-bar" style="height: 90%;"></div>
+                  <span class="d-label">18h</span>
+                </div>
+                <div class="density-bar-col">
+                  <div class="d-bar" style="height: 30%;"></div>
+                  <span class="d-label">19h</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="feed-section">
+              <div class="feed-header">
+                <h3>Timeline de Registros Recentes</h3>
+                <span class="feed-tag">AO VIVO</span>
+              </div>
+
+              <div class="feed-list" id="feedList">
+                <div class="empty-feed">
+                  <span>⏳</span>
+                  <p>Aguardando primeiras leituras biométricas do dia...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: CADASTRO BIOMÉTRICO -->
+      <div id="view-enroll" class="view-panel">
+        <div class="enroll-container">
+          <div class="enroll-form-card">
+            <div class="panel-header">
+              <h2>Novo Cadastro de Colaborador</h2>
+              <p>Insira a identificação do colaborador e colete a biometria óptica</p>
+            </div>
+
+            <div class="form-grid">
+              <div class="field-group">
+                <label for="inputEnrollName">Nome Completo</label>
+                <div class="field-input-wrap">
+                  <span class="field-icon">👤</span>
+                  <input type="text" id="inputEnrollName" placeholder="Ex: Geovanni Honorato" oninput="validateEnrollForm()">
+                </div>
+              </div>
+
+              <div class="field-group">
+                <label for="inputEnrollRole">Departamento / Cargo (Opcional)</label>
+                <div class="field-input-wrap">
+                  <span class="field-icon">💼</span>
+                  <input type="text" id="inputEnrollRole" placeholder="Ex: Engenharia de Computação">
+                </div>
+              </div>
+            </div>
+
+            <div class="enroll-scanner-section">
+              <div class="enroll-pad-wrapper" id="enrollPadWrapper" onclick="triggerEnrollCapture()">
+                <div class="enroll-laser"></div>
+                <div class="enroll-fingerprint">
+                  <div class="fp-custom-icon"></div>
+                </div>
+              </div>
+
+              <div class="enroll-instructions">
+                <h4 id="enrollStatusTitle">1. Clique para capturar a digital</h4>
+                <p id="enrollStatusDesc">O leitor óptico coletará a matriz de minúcias ISO/ANSI 378 em 500 DPI.</p>
+
+                <div class="quality-indicator-bar" id="qualityIndicatorBar" style="display: none;">
+                  <div class="qi-label">
+                    <span>Qualidade da Coleta</span>
+                    <span id="qiPercent">99%</span>
+                  </div>
+                  <div class="qi-track">
+                    <div class="qi-fill" id="qiFill" style="width: 99%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-submit-actions">
+              <button class="btn-action-primary" id="btnConfirmEnroll" onclick="saveEnrollmentAction()" disabled>
+                <span>💾 Salvar e Emitir Comprovante na Epson</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: BASE DE COLABORADORES -->
+      <div id="view-employees" class="view-panel">
+        <div class="directory-card">
+          <div class="panel-header flex-between">
+            <div>
+              <h2>Colaboradores Cadastrados</h2>
+              <p>Gerencie a base de templates biométricos e emita 2ª via de comprovantes</p>
+            </div>
+            <button class="btn-action-secondary" onclick="switchView('enroll')">
+              <span>➕ Novo Cadastro</span>
+            </button>
+          </div>
+
+          <div class="table-search-bar">
+            <span class="search-ico">🔍</span>
+            <input type="text" id="employeeSearchInput" placeholder="Pesquisar por nome ou ID..." oninput="filterEmployeeTable(this.value)">
+          </div>
+
+          <div class="employee-table-wrap">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>COLABORADOR</th>
+                  <th>ID DO REGISTRO</th>
+                  <th>DATA DE CADASTRO</th>
+                  <th>QUALIDADE</th>
+                  <th style="text-align: right;">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="employeeTableBody">
+                <!-- Preenchido via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: HISTÓRICO DE REGISTROS -->
+      <div id="view-logs" class="view-panel">
+        <div class="directory-card">
+          <div class="panel-header flex-between">
+            <div>
+              <h2>Histórico Completo de Autenticações</h2>
+              <p>Auditoria de registros biométricos e emissão de comprovantes térmicos</p>
+            </div>
+            <button class="btn-action-secondary" onclick="clearLogsHistory()">
+              <span>🗑️ Limpar Logs Locais</span>
+            </button>
+          </div>
+
+          <div class="employee-table-wrap">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>STATUS</th>
+                  <th>COLABORADOR</th>
+                  <th>DATA & HORÁRIO</th>
+                  <th>COMPATIBILIDADE</th>
+                  <th>IMPRESSÃO EPSON</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <!-- Preenchido via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 5: HARDWARE & PERIFÉRICOS -->
+      <div id="view-peripherals" class="view-panel">
+        <div class="directory-card">
+          <div class="panel-header">
+            <h2>Diagnóstico de Periféricos & Integrações</h2>
+            <p>Status de comunicação com os hardwares conectados ao terminal</p>
+          </div>
+
+          <div class="hardware-diagnostic-grid">
+            <!-- HARDWARE 1: BIOMINI -->
+            <div class="diag-card">
+              <div class="diag-icon icon-blue">🔬</div>
+              <div class="diag-content">
+                <h3>Suprema BioMini (1ª Geração)</h3>
+                <p>Sensor Óptico 500 DPI • USB VID 16D1 & PID 0400</p>
+                <div class="diag-status-row">
+                  <span class="badge-status-online" id="diagBioBadge">● Conectado & Operacional</span>
+                  <span class="badge-tech">Touch & Auto-Sensing Ativo</span>
+                </div>
+                <div class="diag-actions">
+                  <button class="btn-diag-test" onclick="sendTestScan()">🔬 Testar Sensor Óptico</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- HARDWARE 2: EPSON -->
+            <div class="diag-card">
+              <div class="diag-icon icon-green">🖨️</div>
+              <div class="diag-content">
+                <h3>Epson TM-T20X Receipt6</h3>
+                <p>Impressora Térmica Não Fiscal 80mm • ESC/POS Raw Spooler</p>
+                <div class="diag-status-row">
+                  <span class="badge-status-online" id="diagEpsonBadge">● Fila de Impressão Pronta</span>
+                  <span class="badge-tech">Auto-Cutter Ativo</span>
+                </div>
+                <div class="diag-actions">
+                  <button class="btn-diag-test" onclick="sendTestPrint()">📄 Imprimir Cupom de Teste</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- SIMULADOR DE COMPROVANTE TÉRMICO 3D (EPSON TM-T20X) -->
+  <div class="receipt-modal-backdrop hidden" id="receiptModalBackdrop" onclick="closeReceiptPreview(event)">
+    <div class="receipt-slot-container" onclick="event.stopPropagation()">
+      <div class="epson-printer-slot">
+        <span class="slot-light"></span>
+        <span class="slot-label">EPSON TM-T20X • AUTO-CUTTER</span>
+      </div>
+
+      <!-- FITA DE PAPEL TÉRMICO ANIMADA -->
+      <div class="thermal-receipt" id="thermalPaperSlip">
+        <div class="receipt-tear-edge top-edge"></div>
+
+        <div class="receipt-body">
+          <div class="rcpt-header">
+            <h4>VERITAS SISTEMAS DE PONTO</h4>
+            <p>COMPROVANTE DE REGISTRO BIOMÉTRICO</p>
+            <div class="rcpt-divider">================================</div>
+          </div>
+
+          <div class="rcpt-info-grid">
+            <div class="rcpt-row"><span class="rc-label">COLABORADOR:</span> <b class="rc-val" id="rcptEmpName">GEOVANNI HONORATO</b></div>
+            <div class="rcpt-row"><span class="rc-label">MATRICULA:</span> <span class="rc-val" id="rcptEmpId">#1788294449602</span></div>
+            <div class="rcpt-row"><span class="rc-label">DATA:</span> <span class="rc-val" id="rcptDate">02/09/2026</span></div>
+            <div class="rcpt-row"><span class="rc-label">HORARIO:</span> <span class="rc-val" id="rcptTime">08:30:15 BRT</span></div>
+            <div class="rcpt-row"><span class="rc-label">PRECISAO:</span> <span class="rc-val" id="rcptScore">100% MATCH (500 DPI)</span></div>
+            <div class="rcpt-row"><span class="rc-label">DISPOSITIVO:</span> <span class="rc-val">SUPREMA BIOMINI USB</span></div>
+          </div>
+
+          <div class="rcpt-divider">--------------------------------</div>
+
+          <!-- CÓDIGO DE BARRAS TÉRMICO E CARIMBO -->
+          <div class="rcpt-security">
+            <div class="rcpt-stamp">AUTENTICADO 1:N</div>
+            <div class="rcpt-barcode">
+              <span>|||| | ||||| ||| ||||||| | ||| ||||</span>
+              <p id="rcptHash">HASH: BIO-7F9A2B-2026</p>
+            </div>
+          </div>
+
+          <div class="rcpt-footer">
+            <p>Documento emitido nos termos da Portaria MTE</p>
+            <p>Guarde este comprovante</p>
+          </div>
+        </div>
+
+        <div class="receipt-tear-edge bottom-edge"></div>
+      </div>
+
+      <div class="receipt-modal-actions">
+        <button class="btn-action-primary" onclick="closeReceiptPreview()">
+          <span>✓ Fechar Visualização</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTAINER DE NOTIFICAÇÕES FLUTUANTES (TOASTS) -->
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

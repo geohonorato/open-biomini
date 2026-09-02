@@ -1,0 +1,74 @@
+;
+; biomini_wbf.inf
+; Windows Biometric Framework (WBDI) Driver for Suprema BioMini
+; Uses WinUSB as the function driver + custom SensorAdapter DLL
+;
+
+[Version]
+Signature="$Windows NT$"
+Class=Biometric
+ClassGuid={53d29ef7-377c-4d14-864b-eb3a85769359}
+Provider=%ProviderName%
+CatalogFile=biomini_wbf.cat
+DriverVer=08/21/2026,1.0.0.2
+PnpLockdown=1
+
+[Manufacturer]
+%ManufacturerName%=SupremaSection,NTamd64
+
+[SupremaSection.NTamd64]
+%DeviceName%=Biometric_Install, USB\VID_16D1&PID_0400
+
+; ========== Source / Destination ==========
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+BioMiniSensorAdapter.dll = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+AdapterCopy = 11
+
+; ========== Install Sections ==========
+
+[Biometric_Install.NT]
+CopyFiles=AdapterCopy
+Include=WINUSB.INF
+Needs=WINUSB.NT
+
+[Biometric_Install.NT.Services]
+Include=WINUSB.INF
+Needs=WINUSB.NT.Services
+
+[Biometric_Install.NT.HW]
+AddReg=Biometric_Device_AddReg
+
+; ========== Registry Entries ==========
+
+[Biometric_Device_AddReg]
+; GUID_DEVINTERFACE_BIOMETRIC_READER — required for WBF discovery
+HKR,,DeviceInterfaceGUIDs,0x10000,"{E2B5183A-99EA-4cc3-AD6B-80CA8D715B80}"
+
+; WinBio sensor adapter configuration
+HKR,WinBio\Configurations,DefaultConfiguration,0x00010001,0
+HKR,WinBio\Configurations\0,SensorAdapterBinary,0x00000000,"BioMiniSensorAdapter.dll"
+HKR,WinBio\Configurations\0,EngineAdapterBinary,0x00000000,"WinBioEngineAdapter.dll"
+HKR,WinBio\Configurations\0,StorageAdapterBinary,0x00000000,"WinBioStorageAdapter.dll"
+HKR,WinBio\Configurations\0,DatabaseId,0x00000000,"{B3F484B6-6B22-4D3B-983C-111122223333}"
+HKR,WinBio\Configurations\0,SensorMode,0x00010001,1
+HKR,WinBio\Configurations\0,SystemSensor,0x00010001,1
+
+; ========== File Copy ==========
+
+[AdapterCopy]
+BioMiniSensorAdapter.dll,,,0x00004000
+
+; ========== Strings ==========
+
+[Strings]
+ProviderName = "OpenBioMini Community"
+ManufacturerName = "Suprema Inc."
+DeviceName = "Suprema BioMini Fingerprint Sensor (WBF)"
+DiskName = "OpenBioMini WBF Driver Installation Disk"
