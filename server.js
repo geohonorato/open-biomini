@@ -42,19 +42,15 @@ function printReceipt(type, name, id, score) {
 
 // 0. Checagem Real e Física de Status dos Periféricos USB
 app.get('/api/hardware-status', (req, res) => {
-  const pnpCmd = `powershell -NoProfile -Command "
-    $bio = (Get-PnpDevice -PresentOnly -FriendlyName '*BioMini*', '*Suprema*', '*Fingerprint Scanner*' -ErrorAction SilentlyContinue | Measure-Object).Count;
-    $eps = (Get-PnpDevice -PresentOnly -FriendlyName '*TM-T20X*', '*TM-T(203dpi)*' -ErrorAction SilentlyContinue | Measure-Object).Count;
-    Write-Output ($bio.ToString() + '|' + $eps.ToString())
-  "`;
+  const pnpCmd = `powershell -NoProfile -Command "$bio = (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Suprema|BioMini|Fingerprint' -or $_.InstanceId -match '16D1' } | Measure-Object).Count; $eps = (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'TM-T|EPSON' } | Measure-Object).Count; Write-Output ($bio.ToString() + '::' + $eps.ToString())"`;
 
   const { exec } = require('child_process');
-  exec(pnpCmd, { timeout: 2500 }, (err, stdout) => {
+  exec(pnpCmd, { timeout: 3500 }, (err, stdout) => {
     let biominiOnline = false;
     let epsonOnline = false;
 
     if (!err && stdout) {
-      const parts = stdout.trim().split('|');
+      const parts = stdout.trim().split('::');
       if (parts.length === 2) {
         biominiOnline = parseInt(parts[0], 10) > 0;
         epsonOnline = parseInt(parts[1], 10) > 0;
